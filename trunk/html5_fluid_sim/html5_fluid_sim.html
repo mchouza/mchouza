@@ -1,0 +1,496 @@
+<html>
+<head>
+	<title>Latice Boltzmann JS Edition</title>
+</head>
+<body>
+	<canvas id="mainCanvas" height="306" width="256"></canvas>
+	<div style="width: 256; text-align:right">
+		<p style="font-size:12px">Por <a href="http://chouza.com.ar">Mariano M. Chouza</a>.</p>
+	</div>
+</body>
+<script>
+/*
+Copyright (c) 2010 Mariano M. Chouza
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use,
+copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+*/
+
+function $(id) {
+	return document.getElementById(id);
+}
+
+var step = (function(){
+	//
+	// closure vars
+	//
+	
+	// visualization data
+	var frameNum = 0;
+	var frameNumStarted = new Date();
+	var fps = '';
+	var ctx = $('mainCanvas').getContext('2d');
+	var particles = [];
+	var controls = null;
+	var boostLine = null;
+	var boost = null;
+	
+	// simulation parameters ("constants")
+	var D = 2;
+	var Q = 9;
+	var N = 64; // 64x64 D2Q9
+	
+	// simulation associated parameters (also constant)
+	var BLOCK_SIZE = N * N;
+	var PROP_D = [
+		[ 0,  0],
+		[ 1,  0],
+		[ 1,  1],
+		[ 0,  1],
+		[-1,  1],
+		[-1,  0],
+		[-1, -1],
+		[ 0, -1],
+		[ 1, -1],
+	];
+	var SC_D = [
+		4 / 9,
+		1 / 9,  // E
+		1 / 36, // NE
+		1 / 9,  // N
+		1 / 36, // NW
+		1 / 9,  // W
+		1 / 36, // SW
+		1 / 9,  // S
+		1 / 36, // SE
+	];
+	var OMEGA = 1.9;
+	
+	// simulation vars
+	var f = [];
+	var accumBuffer = [];
+	var offsets = [];
+	var paused = false;
+	
+	//
+	// closure functions
+	//
+	
+	// square
+	function sqr(x) {
+		return x * x;
+	}
+
+	// gets f at equilibrium
+	function getFEq(rho, ux, uy, uSqr, i) {
+		var dotProd = ux * PROP_D[i][0] + uy * PROP_D[i][1];
+		var eqF = SC_D[i] * rho *
+			(1 + 3 * dotProd + 4.5 * dotProd * dotProd - 1.5 * uSqr);
+		return eqF;
+	}
+	
+	// interface initialization
+	function initInterface() {
+		$('mainCanvas').onmousedown = onMouseDown;
+		$('mainCanvas').onmouseup = onMouseUp;
+		$('mainCanvas').onmousemove = onMouseMove;
+		controls = [
+			[[0, 0, 256, 256], onArea, drawArea],
+			[[10, 266, 30, 30], onPlayPause, drawPlayPause],
+			[[50, 266, 30, 30], onFullReset, drawFullReset],
+			[[90, 266, 30, 30], onVisReset, drawVisReset]
+		];
+	}
+	
+	// simulation initialization
+	function initSimulation(demo) {
+		for (var i = 0; i < Q; i++) {
+			for (var x = 0; x < N; x++) {
+				for (var y = 0; y < N; y++) {
+					var ux, uy;
+					if (demo) {
+						if (sqr(x - N/4) + sqr(y - N/4) < sqr(N/8)) {
+							ux = 0.2;
+							uy = 0;
+						} else if (sqr(x - 3*N/4) + sqr(y - 3*N/4) < sqr(N/8)) {
+							ux = -0.14;
+							uy = -0.14;
+						} else {
+							ux = uy = 0;
+						}
+					} else {
+						ux = uy = 0;
+					}
+					f[x+y*N+i*N*N] = getFEq(1, ux, uy, sqr(ux) + sqr(uy), i);
+				}
+			}
+		}
+		for (var i = 0; i < Q; i++) {
+			offsets[i] = 0;
+		}
+	}
+	
+	// particles initialization
+	function initParticles() {
+		// TODO: IMPLEMENT PROPER CHAINS
+		var i = 0;
+		particles = [];
+		for (var x = 0; x < 256; x += 32) {
+			for (var y = 0; y < 256; y += 4) {
+				particles[i++] = [x, y];
+			}
+		}
+	}
+	
+	// initialization
+	function init() {
+		initInterface();
+		initSimulation(true);
+		initParticles();
+	}
+	
+	// update accumulation buffer
+	function updAccumBuffer() {
+		for (var i = 0; i < BLOCK_SIZE; i++) {
+			accumBuffer[3*i] = f[i];
+			accumBuffer[3*i+1] = 0;
+			accumBuffer[3*i+2] = 0;
+		}
+		
+		for (var i = 1; i < Q; i++) {
+			var propDX = PROP_D[i][0];
+			var propDY = PROP_D[i][1];
+			var baseK = i * BLOCK_SIZE;
+			var endK = baseK + BLOCK_SIZE;
+			
+			var j, k;
+			for (j = offsets[i], k = baseK; j < BLOCK_SIZE; j++, k++) {
+				accumBuffer[3*j] += f[k];
+				accumBuffer[3*j+1] += propDX * f[k];
+				accumBuffer[3*j+2] += propDY * f[k];
+			}
+			for (j = 0; k < endK; j++, k++) {
+				accumBuffer[3*j] += f[k];
+				accumBuffer[3*j+1] += propDX * f[k];
+				accumBuffer[3*j+2] += propDY * f[k];
+			}
+		}
+		
+		for (var i = 0; i < BLOCK_SIZE; i++) {
+			accumBuffer[3*i+1] /= accumBuffer[3*i];
+			accumBuffer[3*i+2] /= accumBuffer[3*i];
+		}
+	}
+	
+	// applies boost
+	function applyBoost() {
+		var boostPoint = boost[0];
+		var boostVec = boost[1];
+		boost = null;
+		
+		var bx = Math.round(boostPoint[0]);
+		var by = Math.round(boostPoint[1]);
+		
+		for (var x = 0; x < N; x++) {
+			for (var y = 0; y < N; y++) {
+				if (sqr(x - bx) + sqr(y - by) < sqr(N/8)) {
+					accumBuffer[3*(N*y+x)+1] += boostVec[0] * 0.2;
+					accumBuffer[3*(N*y+x)+2] += boostVec[1] * 0.2;
+					
+					var n = Math.sqrt(sqr(accumBuffer[3*(N*y+x)+1]) +
+						sqr(accumBuffer[3*(N*y+x)+2]));
+					if (n > 0.2) {
+						accumBuffer[3*(N*y+x)+1] /= 5 * n;
+						accumBuffer[3*(N*y+x)+2] /= 5 * n;
+					}
+				}
+			}
+		}
+	}
+	
+	// collision handling
+	function collide() {
+		for (var i = 0; i < Q; i++) {
+			var j, k;
+			var baseK = i * BLOCK_SIZE;
+			var endK = baseK + BLOCK_SIZE;
+			var oneMinusOmega = 1 - OMEGA;
+			var endJ = 3 * BLOCK_SIZE;
+			
+			for (j = 3 * offsets[i], k = baseK; j < endJ; j+=3, k++) {
+				var uSqr = accumBuffer[j+1] * accumBuffer[j+1] +
+					accumBuffer[j+2] * accumBuffer[j+2];
+				var dotProd = accumBuffer[j+1] * PROP_D[i][0] +
+					accumBuffer[j+2] * PROP_D[i][1];
+				var eqF = SC_D[i] * accumBuffer[j] *
+					(1 + (3 + 4.5 * dotProd) * dotProd - 1.5 * uSqr);
+				f[k] = f[k] * oneMinusOmega + eqF * OMEGA;
+			}
+			for (j = 0; k < endK; j+=3, k++) {
+				var uSqr = accumBuffer[j+1] * accumBuffer[j+1] +
+					accumBuffer[j+2] * accumBuffer[j+2];
+				var dotProd = accumBuffer[j+1] * PROP_D[i][0] +
+					accumBuffer[j+2] * PROP_D[i][1];
+				var eqF = SC_D[i] * accumBuffer[j] *
+					(1 + (3 + 4.5 * dotProd) * dotProd - 1.5 * uSqr);
+				f[k] = f[k] * oneMinusOmega + eqF * OMEGA;
+			}
+		}
+	}
+	
+	// propagation
+	function propagate() {
+		for (var i = 0; i < Q; i++) {
+			offsets[i] += PROP_D[i][0] + N * PROP_D[i][1];
+			offsets[i] %= BLOCK_SIZE;
+			if (offsets[i] < 0) {
+				offsets[i] += BLOCK_SIZE;
+			}
+		}
+	}
+	
+	// updates particle coordinates
+	function updateParticles() {
+		var n = particles.length;
+		var c = 256 / N;
+		for (var i = 0; i < n; i++) {
+			var p = particles[i];
+			var prx = Math.round(p[0] / c) % N;
+			var pry = Math.round(p[1] / c) % N;
+			var ux = accumBuffer[3*(N*pry+prx)+1];
+			var uy = accumBuffer[3*(N*pry+prx)+2];
+			p[0] = (p[0] + ux) % 256;
+			p[1] = (p[1] + uy) % 256;
+			if (p[0] < 0) {
+				p[0] += 256;
+			}
+			if (p[1] < 0) {
+				p[1] += 256;
+			}
+		}
+	}
+	
+	// draws the simulation area
+	function drawArea(rect) {
+		ctx.fillStyle = '#000';
+		ctx.fillRect(0, 0, 256, 256);
+	
+		var n = particles.length;
+		ctx.fillStyle = '#fff';
+		for (var i = 0; i < n; i++) {
+			var p = particles[i];
+			ctx.fillRect(p[0]-1, p[1]-1, 2, 2);
+		}
+		
+		if (boostLine) {
+			ctx.strokeStyle = '#a00';
+			ctx.lineWidth = 2;
+			ctx.beginPath();
+			ctx.moveTo(boostLine[0][0], boostLine[0][1]);
+			ctx.lineTo(boostLine[1][0], boostLine[1][1]);
+			ctx.stroke();
+		}
+	}
+	
+	// draws the play/pause button
+	function drawPlayPause(rect) {
+		ctx.fillStyle = '#7ac';
+		ctx.fillRect(rect[0], rect[1], rect[2], rect[3]);
+		ctx.fillStyle = '#000';
+		if (paused) {
+			ctx.beginPath();
+			ctx.moveTo(rect[0] + 10, rect[1] + 8);
+			ctx.lineTo(rect[0] + 10, rect[1] + 22);
+			ctx.lineTo(rect[0] + 20, rect[1] + 15);
+			ctx.fill();
+		} else {
+			ctx.fillRect(rect[0] + 10, rect[1] + 8, 4, 14);
+			ctx.fillRect(rect[0] + 16, rect[1] + 8, 4, 14);
+		}
+	}
+	
+	// draws the full reset button
+	function drawFullReset(rect) {
+		ctx.fillStyle = '#7ac';
+		ctx.fillRect(rect[0], rect[1], rect[2], rect[3]);
+		ctx.fillStyle = '#000';
+		ctx.beginPath();
+		ctx.moveTo(rect[0] + 5, rect[1] + 15);
+		ctx.lineTo(rect[0] + 10, rect[1] + 15);
+		ctx.lineTo(rect[0] + 7.5, rect[1] + 10);
+		ctx.fill();
+		ctx.strokeStyle = '#000';
+		ctx.lineWidth = 2;
+		ctx.arc(rect[0] + 15, rect[1] + 15, 7.5, -Math.PI, -Math.PI/2, true);
+		ctx.stroke();
+	}
+	
+	// draws the visualization reset button
+	function drawVisReset(rect) {
+		ctx.fillStyle = '#7ac';
+		ctx.fillRect(rect[0], rect[1], rect[2], rect[3]);
+		ctx.lineWidth = 1.5;
+		ctx.strokeStyle = '#000';
+		ctx.beginPath();
+		for (var x = 0; x <= 15; x+=5) {
+			ctx.moveTo(rect[0] + 7.5 + x, rect[1] + 7.5);
+			ctx.lineTo(rect[0] + 7.5 + x, rect[1] + 30 - 7.5);
+		}
+		ctx.stroke();
+	}
+	
+	// draws all the visualization items
+	function draw() {
+		// background
+		ctx.fillStyle = '#57a';
+		ctx.fillRect(0, 256, 256, 306);
+		
+		// controls
+		var controlsLen = controls.length;
+		for (var i = 0; i < controlsLen; i++) {
+			var c = controls[i];
+			c[2](c[0]);
+		}
+		
+		// FPS
+		frameNum++;
+		var now = new Date();
+		if (now - frameNumStarted > 1000) {
+			fps =  (1000 / ((now - frameNumStarted) / frameNum)).toFixed(2) + ' FPS';
+			frameNum = 0;
+			frameNumStarted = now;
+		}
+		ctx.font = '12px sans-serif';
+		ctx.textAlign = 'right';
+		ctx.fillStyle = '#ccc';
+		ctx.fillText(fps, 245, 275);
+	}
+	
+	// schedules a boost for the next simulation step
+	function scheduleBoost(start, end) {
+		var n = Math.sqrt(sqr(end[0] - start[0]) + sqr(end[1] - start[1]));
+		if (n < 1) {
+			return;
+		}
+		var boostVec = [(end[0] - start[0]) / n, (end[1] - start[1]) / n];
+		var c = N / 256;
+		var boostPoint = [c * start[0], c * start[1]];
+		boost = [boostPoint, boostVec];
+	}
+	
+	// handles events over the simulation area
+	function onArea(type, x, y) {
+		if (type === 'down') {
+			boostLine = [[x, y], [x, y]];
+		} else if (type === 'move') {
+			if (boostLine) {
+				boostLine[1] = [x, y];
+			}
+		} else if (type === 'up') {
+			if (boostLine) {
+				scheduleBoost(boostLine[0], boostLine[1]);
+				boostLine = null;
+			}
+		}
+	}
+	
+	// handles events over the play/pause button
+	function onPlayPause(type) {
+		if (type === 'down') {
+			paused = !paused;
+		}
+	}
+	
+	// handles events over the full reset button
+	function onFullReset(type) {
+		if (type === 'down') {
+			initSimulation();
+			initParticles();
+		}
+	}
+	
+	// handles events over the visualization reset button
+	function onVisReset(type) {
+		if (type === 'down') {
+			initParticles();
+		}
+	}
+	
+	// dispatches events to their specific handlers
+	function dispatchEvent(e, type) {
+		// get event position
+		e = e || window.event;
+		var p = [
+			e.clientX - $('mainCanvas').offsetLeft,
+			e.clientY - $('mainCanvas').offsetTop
+		];
+		
+		// call handlers
+		var controlsLen = controls.length;
+		for (var i = 0; i < controlsLen; i++) {
+			var c = controls[i];
+			var dx = p[0] - c[0][0];
+			var dy = p[1] - c[0][1];
+			if (dx >= 0 && dx < c[0][2] && dy >= 0 && dy < c[0][3]){
+				c[1](type, p[0], p[1]);
+			}
+		}
+	}
+	
+	// processes 'onmousedown' events
+	function onMouseDown(e) {
+		dispatchEvent(e, 'down');
+	}
+	
+	// processes 'onmouseup' events
+	function onMouseUp(e) {
+		dispatchEvent(e, 'up');
+	}
+	
+	// processes 'onmousemove' events
+	function onMouseMove(e) {
+		dispatchEvent(e, 'move');
+	}
+	
+	//
+	// initializes the closure vars & returns the step function
+	//
+	
+	init();
+	return function() {		
+		if (!paused) {
+			updAccumBuffer();
+			if (boost) {
+				applyBoost();
+			}
+			collide();
+			propagate();
+			updateParticles();
+		}
+		
+		draw();
+	}
+})();
+
+// starts the simulation run
+setInterval(step, 1);
+</script>
+</html>
