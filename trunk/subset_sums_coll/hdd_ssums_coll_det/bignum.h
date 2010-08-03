@@ -15,6 +15,7 @@ typedef struct
 void bignum_clear(bignum_t* op);
 void bignum_copy(bignum_t* op1, const bignum_t* op2);
 void bignum_add(bignum_t* op1, const bignum_t* op2);
+int bignum_cmp(const bignum_t* op1, const bignum_t* op2);
 void bignum_print(bignum_t* op);
 void bignum_sprint(char* buf, bignum_t* op);
 

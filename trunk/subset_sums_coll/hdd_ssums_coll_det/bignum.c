@@ -28,6 +28,24 @@ void bignum_add(bignum_t* op1, const bignum_t* op2)
     }
 }
 
+int bignum_cmp(const bignum_t* op1, const bignum_t* op2)
+{
+    if (op1->d2 > op2->d2)
+      return 1;
+    else if (op1->d2 < op2->d2)
+      return -1;
+    else if (op1->d1 > op2->d1)
+      return 1;
+    else if (op1->d1 < op2->d1)
+      return -1;
+    else if (op1->d0 > op2->d0)
+      return 1;
+    else if (op1->d0 < op2->d0)
+      return -1;
+    else
+      return 0;
+}
+
 void bignum_print(bignum_t* op)
 {
     printf("0x%08x%08x%08x\n", op->d2, op->d1, op->d0);
