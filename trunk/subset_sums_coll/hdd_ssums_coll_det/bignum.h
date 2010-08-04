@@ -1,9 +1,7 @@
 #ifndef BIGNUM_H
 #define BIGNUM_H
 
-typedef unsigned char byte;
-typedef unsigned short uint16_t;
-typedef unsigned int uint32_t;
+#include "basic.h"
 
 typedef struct
 {

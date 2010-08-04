@@ -175,7 +175,15 @@
 				>
 			</File>
 			<File
+				RelativePath=".\comb_gen.c"
+				>
+			</File>
+			<File
 				RelativePath=".\comb_sum.c"
+				>
+			</File>
+			<File
+				RelativePath=".\fb_bucket.c"
 				>
 			</File>
 			<File
@@ -197,11 +205,23 @@
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
 			<File
+				RelativePath=".\basic.h"
+				>
+			</File>
+			<File
 				RelativePath=".\bignum.h"
 				>
 			</File>
 			<File
+				RelativePath=".\comb_gen.h"
+				>
+			</File>
+			<File
 				RelativePath=".\comb_sum.h"
+				>
+			</File>
+			<File
+				RelativePath=".\fb_bucket.h"
 				>
 			</File>
 			<File
