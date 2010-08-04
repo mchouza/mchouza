@@ -1,7 +1,7 @@
 #include "bignum.h"
 
-static uint32_t m_w = 0xACD32662;
-static uint32_t m_z = 0xAEE563E2;
+static uint32_t m_w = 0xacd32662;
+static uint32_t m_z = 0xaee563e2;
  
 uint32_t get_random(void)
 {

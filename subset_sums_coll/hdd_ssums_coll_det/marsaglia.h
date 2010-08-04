@@ -1,7 +1,7 @@
 #ifndef MARSAGLIA_H
 #define MARSAGLIA_H
 
-#include "bignum.h"
+#include "basic.h"
 
 uint32_t get_random(void);
 
