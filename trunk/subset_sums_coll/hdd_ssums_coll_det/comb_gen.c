@@ -16,7 +16,7 @@ void gen_random_comb(byte* comb_set, uint32_t n, uint32_t k)
     }
 }
 
-#if 1
+#if 0
 
 #include <stdio.h>
 

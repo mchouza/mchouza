@@ -183,16 +183,19 @@
 				>
 			</File>
 			<File
-				RelativePath=".\fb_bucket.c"
-				>
-			</File>
-			<File
 				RelativePath=".\marsaglia.c"
 				>
 			</File>
 			<File
 				RelativePath=".\subset_sum.c"
 				>
+				<FileConfiguration
+					Name="Release|Win32"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+					/>
+				</FileConfiguration>
 			</File>
 			<File
 				RelativePath=".\timer.c"
@@ -218,10 +221,6 @@
 			</File>
 			<File
 				RelativePath=".\comb_sum.h"
-				>
-			</File>
-			<File
-				RelativePath=".\fb_bucket.h"
 				>
 			</File>
 			<File
