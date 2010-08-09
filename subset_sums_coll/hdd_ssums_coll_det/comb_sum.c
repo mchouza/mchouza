@@ -83,15 +83,14 @@ static bignum_t* all_sums_by_word_and_pos[5];
 void comb_init(void)
 {
     int i, j;
-    byte comb_set[9]; /* ceil(70/8)*8 = 72 */
+    byte comb_set[10]; /* ceil(70/16)*16 = 80 */
 
     /* reserves memory for the fast sum buffers */
-    for (i = 0; i < 4; i++)
+    for (i = 0; i < 5; i++)
         all_sums_by_word_and_pos[i] = malloc((1 << 16) * sizeof(bignum_t));
-    all_sums_by_word_and_pos[4] = malloc((1 << (70-64)) * sizeof(bignum_t));
 
-    /* fills the full word buffers */
-    for (i = 0; i < 4; i++)
+    /* fills the buffers */
+    for (i = 0; i < 5; i++)
     {
         memset(comb_set, 0, sizeof(comb_set));
         for (j = 0; j < 1 << 16; j++)
@@ -99,14 +98,6 @@ void comb_init(void)
             ((uint16_t*)comb_set)[i] = j;
             comb_sum(&all_sums_by_word_and_pos[i][j], comb_set);
         }
-    }
-
-    /* fills the last buffer */
-    memset(comb_set, 0, sizeof(comb_set));
-    for (j = 0; j < 1 << (70-64); j++)
-    {
-        comb_set[8] = j;
-        comb_sum(&all_sums_by_word_and_pos[4][j], comb_set);
     }
 }
 
