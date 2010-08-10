@@ -3,6 +3,8 @@ Microsoft Visual Studio Solution File, Format Version 10.00
 # Visual C++ Express 2008
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "subset_sum", "subset_sum.vcproj", "{2F47E4C8-6870-454A-869A-3E1E498389A7}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "subset_sum_coll_det", "subset_sum_coll_det.vcproj", "{7702A58F-B1F8-4430-AE90-D8B93C0325FE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -13,6 +15,10 @@ Global
 		{2F47E4C8-6870-454A-869A-3E1E498389A7}.Debug|Win32.Build.0 = Debug|Win32
 		{2F47E4C8-6870-454A-869A-3E1E498389A7}.Release|Win32.ActiveCfg = Release|Win32
 		{2F47E4C8-6870-454A-869A-3E1E498389A7}.Release|Win32.Build.0 = Release|Win32
+		{7702A58F-B1F8-4430-AE90-D8B93C0325FE}.Debug|Win32.ActiveCfg = Debug|Win32
+		{7702A58F-B1F8-4430-AE90-D8B93C0325FE}.Debug|Win32.Build.0 = Debug|Win32
+		{7702A58F-B1F8-4430-AE90-D8B93C0325FE}.Release|Win32.ActiveCfg = Release|Win32
+		{7702A58F-B1F8-4430-AE90-D8B93C0325FE}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
