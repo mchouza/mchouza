@@ -1,0 +1,18 @@
+<html>
+<body>
+	<span id="primes">Nothing</span>
+</body>
+<script>
+function $(id) {
+	return document.getElementById(id);
+}
+
+function showPrimes(primes) {
+	$('primes').innerText = primes;
+}
+
+var worker = new Worker('find_primes.js');
+worker.onMessage = function (e) { show_primes(e.data); };
+worker.postMessage('start 1 100');
+</script>
+</html>
