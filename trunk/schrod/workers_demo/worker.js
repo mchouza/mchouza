@@ -5,5 +5,5 @@ search: while (true) {
     if (n % i == 0)
      continue search;
   // found a prime!
-  postMessage(n);
+  postMessage([[n]]);
 }
