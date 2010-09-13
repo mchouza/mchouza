@@ -6,6 +6,7 @@ echo @echo off >%output_path%
 echo ::Compiled representation of BF source file %1 >>%output_path%
 echo set cell_num=0 >>%output_path%
 echo set printable_chars=^^^ ^^^!^^^"^^^#^^^$^^^%%%%^^^&'^^^(^^^)^^^*^^^+^^^,^^^-^^^.^^^/^^^0^^^1^^^2^^^3^^^4^^^5^^^6^^^7^^^8^^^9^^^:^^^;^^^<^^^=^^^>^^^?^^^@^^^A^^^B^^^C^^^D^^^E^^^F^^^G^^^H^^^I^^^J^^^K^^^L^^^M^^^N^^^O^^^P^^^Q^^^R^^^S^^^T^^^U^^^V^^^W^^^X^^^Y^^^Z^^^[^^^\^^^]^^^^^^^_^^^`^^^a^^^b^^^c^^^d^^^e^^^f^^^g^^^h^^^i^^^j^^^k^^^l^^^m^^^n^^^o^^^p^^^q^^^r^^^s^^^t^^^u^^^v^^^w^^^x^^^y^^^z^^^{^^^|^^^}^^^~>>%output_path%
+echo set input_line="" >>%output_path%
 for /f "tokens=*" %%l in (%1) do call :proc_token "%%l"
 goto :eof
 
@@ -50,7 +51,13 @@ set /a next_label_num=next_label_num+1
 goto :eof
 :not_dot
 if %c% neq "," goto not_comma
-echo COMMA >>%output_path%
+echo if %%input_line%% neq "" goto end_read_line_%next_label_num% >>%output_path%
+echo (set /p input_line=)>>%output_path%
+echo set input_line=^"%%input_line:"=""%%" >>%output_path%
+echo :end_read_line_%next_label_num% >>%output_path%
+echo (set char=%%input_line:~1,1%%)>>%output_path%
+echo if "%%char%%" equ ^^^""" (set input_line="%%input_line:~2,-1%%") else (set input_line="%%input_line:~1,-1%%") >>%output_path%
+set /a next_label_num=next_label_num+1
 goto :eof
 :not_comma
 if %c% neq "[" goto not_lsq
