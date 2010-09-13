@@ -1,0 +1,6 @@
+@echo off
+echo Compiling...
+call bf2bat input1.bf output1.bf.cmd
+echo Running...
+call output1.bf.cmd
+pause
