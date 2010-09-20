@@ -1,0 +1,361 @@
+<html>
+<head>
+	<title>HTML5 Schr&ouml;dinger Equation Simulator</title>
+</head>
+<body>
+	<canvas id="mainCanvas" height="306" width="256"></canvas>
+	<div style="width: 256; text-align:right">
+		<p style="font-size:12px">Por <a href="http://chouza.com.ar">Mariano M. Chouza</a>.</p>
+	</div>
+</body>
+<script>
+/*
+Copyright (c) 2010 Mariano M. Chouza
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use,
+copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+*/
+
+function $(id) {
+	return document.getElementById(id);
+}
+
+var step = (function(){
+	//
+	// closure vars
+	//
+	
+	// visualization data
+	var frameNum = 0;
+	var frameNumStarted = new Date();
+	var fps = '';
+	var ctx = $('mainCanvas').getContext('2d');
+	var controls = null;
+    var paused = false;
+	
+	// simulation parameters ("constants")
+	
+	// simulation associated parameters (also constant)
+	
+	// simulation vars
+    var psiR = null;
+    var psiI = null;
+    var v = null;
+	
+	//
+	// closure functions
+	//
+	
+	// square
+	function sqr(x) {
+		return x * x;
+	}
+    
+    // minimum & maximum function
+    function minMax(l, filter) {
+        var ll = l.length;
+        if (!filter) {
+            filter = function(x){return x;};
+        }
+        var min = filter(l[0]);
+        var max = filter(l[0]);
+        for (var i = 1; i < ll; i++) {
+            var e = filter(l[i]);
+            if (e < min) {
+                min = e;
+            } else if (e > max) {
+                max = e;
+            }
+        }
+        return [min, max];
+    }
+
+	// interface initialization
+	function initInterface() {
+		$('mainCanvas').onmousedown = onMouseDown;
+		$('mainCanvas').onmouseup = onMouseUp;
+		$('mainCanvas').onmousemove = onMouseMove;
+		controls = [
+			[[0, 0, 256, 256], onArea, drawArea],
+			[[10, 266, 30, 30], onPlayPause, drawPlayPause],
+			[[50, 266, 30, 30], onFullReset, drawFullReset]
+		];
+	}
+	
+	// simulation initialization
+	function initSimulation() {
+    
+        // initializes simulation parameters
+        psiR = [];
+        psiI = [];
+        v = [];
+        for (var x = 0; x < 256; x++) {
+            for (var y = 0; y < 256; y++) {
+                psiR[256 * y + x] = 0;
+                psiI[256 * y + x] = 0;
+                v[256 * y + x] = 0;
+            }
+        }
+        
+        // sets some demo values
+        for (var x = 0; x < 256; x++) {
+            for (var y = 0; y < 256; y++) {
+                if ((x > 100) && (x < 150) && (y > 100) && (y < 150)) {
+                    v[256 * y + x] = 0.05;
+                }
+                psiR[256 * y + x] = Math.sin((y / 256) * 32 * 2 * Math.PI) * Math.exp(-sqr((y-80) / 5));
+                psiI[256 * y + x] = Math.cos((y / 256) * 32 * 2 * Math.PI) * Math.exp(-sqr((y-80) / 5));
+            }
+        }
+	}
+	
+	// initialization
+	function init() {
+		initInterface();
+		initSimulation();
+	}
+	
+    // gets derivatives
+    function getDerivs(psiRDot, psiIDot, psiR, psiI) {
+        var mod = function(x) {
+            ret = x % 256;
+            if (ret < 0) {
+                return ret + 256;
+            } else {
+                return ret;
+            }
+        }
+    
+        for (var y = 0; y < 256; y++) {
+            for (var x = 0; x < 256; x++) {
+                psiRDot[y * 256 + x] = -0.5 * (-psiI[mod(y - 1) * 256 + x] - psiI[y * 256 + mod(x - 1)] + 4 * psiI[y * 256 + x] - psiI[y * 256 + mod(x + 1)] - psiI[mod(y + 1) * 256 + x]) + v[y * 256 + x] * psiI[y * 256 + x];
+                psiIDot[y * 256 + x] =  0.5 * (-psiR[mod(y - 1) * 256 + x] - psiR[y * 256 + mod(x - 1)] + 4 * psiR[y * 256 + x] - psiR[y * 256 + mod(x + 1)] - psiR[mod(y + 1) * 256 + x]) - v[y * 256 + x] * psiR[y * 256 + x];
+            }
+        }
+    }
+    
+    // updates the simulation
+    function update() {
+        // i hbar d/dt psi = -hbar^2/(2m) lap psi + v psi
+        // hbar = m = 1
+        // i d/dt psi = -1/2 lap psi + v psi
+        // d/dt psi = i/2 lap psi - i v psi
+        // d/dt (psi_r + i psi_i) = i/2 lap (psi_r + i psi_i) - i v (psi_r + i psi_i)
+        // d/dt (psi_r + i psi_i) = i/2 lap psi_r - 1/2 lap psi_i - i v psi_r + v psi_i
+        // d/dt psi_r = -1/2 lap psi_i + v psi_i
+        // d/dt psi_i = 1/2 lap psi_r - v psi_r
+        
+        // the laplacian operator can be aproximated by the following kernel:
+        // [ 0 -1  0 ]
+        // [-1  4 -1 ]
+        // [ 0 -1  0 ]
+        
+        /*
+        // euler step
+        var psiRDot = [];
+        var psiIDot = [];
+        getDerivs(psiRDot, psiIDot, psiR, psiI);
+        for (var i = 0; i < 256 * 256; i++) {
+            psiR[i] += 0.1 * psiRDot[i];
+            psiI[i] += 0.1 * psiIDot[i];
+        }
+        */
+        // midpoint method
+        var psiRDot1 = [];
+        var psiIDot1 = [];
+        var psiRMid = [];
+        var psiIMid = [];
+        var psiRDot2 = [];
+        var psiIDot2 = [];
+        
+        getDerivs(psiRDot1, psiIDot1, psiR, psiI);
+        for (var i = 0; i < 256 * 256; i++) {
+            psiRMid[i] = psiR[i] + 0.1 * psiRDot1[i];
+            psiIMid[i] = psiI[i] + 0.1 * psiIDot1[i];
+        }
+        getDerivs(psiRDot2, psiIDot2, psiRMid, psiIMid);
+        for (var i = 0; i < 256 * 256; i++) {
+            psiR[i] += 0.2 * psiRDot2[i];
+            psiI[i] += 0.2 * psiIDot2[i];
+        }
+    }
+    
+	// draws the simulation area
+	function drawArea(rect) {
+		
+        // gets context objects
+        var imd = ctx.getImageData(0, 0, 256, 256);
+        var cpa = imd.data;
+        
+        // gets simulations data scaling parameters
+        var psiRBounds = minMax(psiR, Math.abs);
+        var psiIBounds = minMax(psiI, Math.abs);
+        var vBounds = minMax(v);
+        var psiRLB = 0;
+        var psiRSF = 255;//255 / psiRBounds[1];
+        var psiILB = 0;
+        var psiISF = 255;//255 / psiIBounds[1];
+        var vLB = vBounds[0];
+        var vSF = 255 / (vBounds[1] - vBounds[0]);
+        
+        // draws the simulation data
+        var cpaI = 0;
+        for (var simDataI = 0; simDataI < 256 * 256; simDataI++) {
+            cpa[cpaI++] = psiRSF * (Math.abs(psiR[simDataI]) - psiRLB);
+            cpa[cpaI++] = psiISF * (Math.abs(psiI[simDataI]) - psiILB);
+            cpa[cpaI++] = vSF * (v[simDataI] - vLB);
+            cpa[cpaI++] = 255;
+        }
+        ctx.putImageData(imd, 0, 0);
+	}
+	
+	// draws the play/pause button
+	function drawPlayPause(rect) {
+		ctx.fillStyle = '#7ac';
+		ctx.fillRect(rect[0], rect[1], rect[2], rect[3]);
+		ctx.fillStyle = '#000';
+		if (paused) {
+			ctx.beginPath();
+			ctx.moveTo(rect[0] + 10, rect[1] + 8);
+			ctx.lineTo(rect[0] + 10, rect[1] + 22);
+			ctx.lineTo(rect[0] + 20, rect[1] + 15);
+			ctx.fill();
+		} else {
+			ctx.fillRect(rect[0] + 10, rect[1] + 8, 4, 14);
+			ctx.fillRect(rect[0] + 16, rect[1] + 8, 4, 14);
+		}
+	}
+	
+	// draws the full reset button
+	function drawFullReset(rect) {
+		ctx.fillStyle = '#7ac';
+		ctx.fillRect(rect[0], rect[1], rect[2], rect[3]);
+		ctx.fillStyle = '#000';
+		ctx.beginPath();
+		ctx.moveTo(rect[0] + 5, rect[1] + 15);
+		ctx.lineTo(rect[0] + 10, rect[1] + 15);
+		ctx.lineTo(rect[0] + 7.5, rect[1] + 10);
+		ctx.fill();
+		ctx.strokeStyle = '#000';
+		ctx.lineWidth = 2;
+		ctx.arc(rect[0] + 15, rect[1] + 15, 7.5, -Math.PI, -Math.PI/2, true);
+		ctx.stroke();
+	}
+    
+	// draws all the visualization items
+	function draw() {
+		// background
+		ctx.fillStyle = '#57a';
+		ctx.fillRect(0, 256, 256, 306);
+		
+		// controls
+		var controlsLen = controls.length;
+		for (var i = 0; i < controlsLen; i++) {
+			var c = controls[i];
+			c[2](c[0]);
+		}
+		
+		// FPS
+		frameNum++;
+		var now = new Date();
+		if (now - frameNumStarted > 1000) {
+			fps =  (1000 / ((now - frameNumStarted) / frameNum)).toFixed(2) + ' FPS';
+			frameNum = 0;
+			frameNumStarted = now;
+		}
+		ctx.font = '12px sans-serif';
+		ctx.textAlign = 'right';
+		ctx.fillStyle = '#ccc';
+		ctx.fillText(fps, 245, 275);
+	}
+	
+	// handles events over the simulation area
+	function onArea(type, x, y) {
+	}
+	
+	// handles events over the play/pause button
+	function onPlayPause(type) {
+		if (type === 'down') {
+			paused = !paused;
+		}
+	}
+	
+	// handles events over the full reset button
+	function onFullReset(type) {
+		if (type === 'down') {
+			initSimulation();
+		}
+	}
+	
+	// dispatches events to their specific handlers
+	function dispatchEvent(e, type) {
+		// get event position
+		e = e || window.event;
+		var p = [
+			e.clientX - $('mainCanvas').offsetLeft,
+			e.clientY - $('mainCanvas').offsetTop
+		];
+		
+		// call handlers
+		var controlsLen = controls.length;
+		for (var i = 0; i < controlsLen; i++) {
+			var c = controls[i];
+			var dx = p[0] - c[0][0];
+			var dy = p[1] - c[0][1];
+			if (dx >= 0 && dx < c[0][2] && dy >= 0 && dy < c[0][3]){
+				c[1](type, p[0], p[1]);
+			}
+		}
+	}
+	
+	// processes 'onmousedown' events
+	function onMouseDown(e) {
+		dispatchEvent(e, 'down');
+	}
+	
+	// processes 'onmouseup' events
+	function onMouseUp(e) {
+		dispatchEvent(e, 'up');
+	}
+	
+	// processes 'onmousemove' events
+	function onMouseMove(e) {
+		dispatchEvent(e, 'move');
+	}
+	
+	//
+	// initializes the closure vars & returns the step function
+	//
+	
+	init();
+	return function() {		
+		if (!paused) {
+            update();
+		}
+		
+		draw();
+	}
+})();
+
+// starts the simulation run
+setInterval(step, 1);
+</script>
+</html>
