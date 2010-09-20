@@ -152,6 +152,14 @@ var step = (function(){
         }
     }
     
+    // euler step
+    function eulerStep(psiR1, psiI1, psiR0, psiI0, psiRDot, psiIDot, dt) {
+        for (var i = 0; i < 256 * 256; i++) {
+            psiR1[i] = psiR0[i] + dt * psiRDot[i];
+            psiI1[i] = psiI0[i] + dt * psiIDot[i];
+        }
+    }
+    
     // updates the simulation
     function update() {
         // i hbar d/dt psi = -hbar^2/(2m) lap psi + v psi
@@ -178,6 +186,7 @@ var step = (function(){
             psiI[i] += 0.1 * psiIDot[i];
         }
         */
+        /*
         // midpoint method
         var psiRDot1 = [];
         var psiIDot1 = [];
@@ -187,14 +196,35 @@ var step = (function(){
         var psiIDot2 = [];
         
         getDerivs(psiRDot1, psiIDot1, psiR, psiI);
-        for (var i = 0; i < 256 * 256; i++) {
-            psiRMid[i] = psiR[i] + 0.1 * psiRDot1[i];
-            psiIMid[i] = psiI[i] + 0.1 * psiIDot1[i];
-        }
+        eulerStep(psiRMid, psiIMid, psiR, psiI, psiRDot1, psiIDot1, 0.1);
         getDerivs(psiRDot2, psiIDot2, psiRMid, psiIMid);
+        eulerStep(psiR, psiI, psiR, psiI, psiRDot2, psiIDot2, 0.2);
+        */
+        // RK4
+        var psiRDotK1 = [];
+        var psiIDotK1 = [];
+        var psiRDotK2 = [];
+        var psiIDotK2 = [];
+        var psiRDotK3 = [];
+        var psiIDotK3 = [];
+        var psiRDotK4 = [];
+        var psiIDotK4 = [];
+        var psiRK2Src = [];
+        var psiIK2Src = [];
+        var psiRK3Src = [];
+        var psiIK3Src = [];
+        var psiRK4Src = [];
+        var psiIK4Src = [];
+        getDerivs(psiRDotK1, psiIDotK1, psiR, psiI);
+        eulerStep(psiRK2Src, psiIK2Src, psiR, psiI, psiRDotK1, psiIDotK1, 0.1);
+        getDerivs(psiRDotK2, psiIDotK2, psiRK2Src, psiIK2Src);
+        eulerStep(psiRK3Src, psiIK3Src, psiR, psiI, psiRDotK2, psiIDotK2, 0.1);
+        getDerivs(psiRDotK3, psiIDotK3, psiRK3Src, psiIK3Src);
+        eulerStep(psiRK4Src, psiIK4Src, psiR, psiI, psiRDotK3, psiIDotK3, 0.2);
+        getDerivs(psiRDotK4, psiIDotK4, psiRK4Src, psiIK4Src);
         for (var i = 0; i < 256 * 256; i++) {
-            psiR[i] += 0.2 * psiRDot2[i];
-            psiI[i] += 0.2 * psiIDot2[i];
+            psiR[i] += 0.2 * (psiRDotK1[i] + 2 * psiRDotK2[i] + 2 * psiRDotK3[i] + psiRDotK4[i]) / 6;
+            psiI[i] += 0.2 * (psiIDotK1[i] + 2 * psiIDotK2[i] + 2 * psiIDotK3[i] + psiIDotK4[i]) / 6;
         }
     }
     
@@ -210,9 +240,9 @@ var step = (function(){
         var psiIBounds = minMax(psiI, Math.abs);
         var vBounds = minMax(v);
         var psiRLB = 0;
-        var psiRSF = 255;//255 / psiRBounds[1];
+        var psiRSF = 255 / psiRBounds[1];
         var psiILB = 0;
-        var psiISF = 255;//255 / psiIBounds[1];
+        var psiISF = 255 / psiIBounds[1];
         var vLB = vBounds[0];
         var vSF = 255 / (vBounds[1] - vBounds[0]);
         
