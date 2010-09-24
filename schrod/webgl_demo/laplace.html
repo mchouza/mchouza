@@ -14,6 +14,8 @@ void main(void)
     const float delta = 1.0 / 512.0;
     vec2 d1 = vTextureCoord - vec2(0.25, 0.5);
     vec2 d2 = vTextureCoord - vec2(0.75, 0.5);
+	d1 = vec2(d1.x, 0.0);
+	d2 = vec2(d2.x, 0.0);
     float dist1sq = dot(d1, d1);
     float dist2sq = dot(d2, d2);
 	
@@ -43,6 +45,7 @@ void main(void)
 {
 	vec4 src = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
 	float brightness = src.r + src.g / 255.0;
+	brightness = brightness - mod(brightness, 0.05);
 	gl_FragColor = vec4(brightness, brightness, brightness, 1.0);
 }
 </script>
