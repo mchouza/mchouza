@@ -7,20 +7,21 @@ precision highp float;
 
 varying vec2 vTextureCoord;
 
-//uniform sampler2D uSampler;
+uniform sampler2D uSampler;
 
 void main(void)
 {
+	gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
     vec2 d1 = vTextureCoord - vec2(0.25, 0.5);
     vec2 d2 = vTextureCoord - vec2(0.75, 0.5);
     float dist1sq = dot(d1, d1);
     float dist2sq = dot(d2, d2);
     if (dist1sq < 0.1 * 0.1)
-        gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+        gl_FragColor += vec4(1.0, 1.0, 1.0, 1.0);
     else if (dist2sq < 0.1 * 0.1)
-        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+        gl_FragColor += vec4(0.0, 0.0, 0.0, 1.0);
     else
-        gl_FragColor = vec4(0.5, 0.5, 0.5, 1.0);
+        gl_FragColor += vec4(0.5, 0.5, 0.5, 1.0);
 }
 </script>
 <script id="shader-vs" type="x-shader/x-vertex">
@@ -86,8 +87,30 @@ function initShaders() {
 
     shaderProgram.textureCoordAttribute = gl.getAttribLocation(shaderProgram, "aTextureCoord");
     gl.enableVertexAttribArray(shaderProgram.textureCoordAttribute);
+
+    shaderProgram.samplerUniform = gl.getUniformLocation(shaderProgram, "uSampler");
 }
 
+
+function handleLoadedTexture(texture) {
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, texture.image);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+}
+
+
+var neheTexture;
+function initTexture() {
+    neheTexture = gl.createTexture();
+    neheTexture.image = new Image();
+    neheTexture.image.onload = function() {
+        handleLoadedTexture(neheTexture)
+    }
+    neheTexture.image.src = "tex.png";
+}
 
 var cubeVertexPositionBuffer;
 var cubeVertexTextureCoordBuffer;
@@ -140,6 +163,10 @@ function drawScene() {
     gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexTextureCoordBuffer);
     gl.vertexAttribPointer(shaderProgram.textureCoordAttribute, cubeVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
 
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, neheTexture);
+    //gl.uniform1i(shaderProgram.samplerUniform, 0);
+
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndexBuffer);
     gl.drawElements(gl.TRIANGLES, cubeVertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
 }
@@ -153,6 +180,7 @@ function webGLStart() {
     initGL(canvas);
     initShaders();
     initBuffers();
+    initTexture();
 
     gl.clearColor(0.0, 0.0, 0.0, 1.0);
 
