@@ -2,7 +2,34 @@
 <head>
 <!-- Based on a WebGL tutorial at http://learningwebgl.com/lessons/lesson05/index.html --><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
 <title>Solving Laplace Equation with WebGL</title>
-<script id="shader-fs" type="x-shader/x-fragment">
+<script id="shader-fs-laplace" type="x-shader/x-fragment">
+precision highp float;
+
+varying vec2 vTextureCoord;
+
+uniform sampler2D uSampler;
+
+void main(void)
+{
+    const float delta = 1.0 / 512.0;
+    vec2 d1 = vTextureCoord - vec2(0.25, 0.5);
+    vec2 d2 = vTextureCoord - vec2(0.75, 0.5);
+    float dist1sq = dot(d1, d1);
+    float dist2sq = dot(d2, d2);
+    if (dist1sq < 0.1 * 0.1) {
+        gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+    } else if (dist2sq < 0.1 * 0.1) {
+        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    } else {
+        gl_FragColor  = 0.249 * texture2D(uSampler, vec2(vTextureCoord.s - delta, vTextureCoord.t - delta));
+        gl_FragColor += 0.249 * texture2D(uSampler, vec2(vTextureCoord.s - delta, vTextureCoord.t + delta));
+        gl_FragColor += 0.249 * texture2D(uSampler, vec2(vTextureCoord.s + delta, vTextureCoord.t - delta));
+        gl_FragColor += 0.249 * texture2D(uSampler, vec2(vTextureCoord.s + delta, vTextureCoord.t + delta));
+        gl_FragColor += (1.0 - 4.0 * 0.249) * 0.5;
+    }
+}
+</script>
+<script id="shader-fs-straight" type="x-shader/x-fragment">
 precision highp float;
 
 varying vec2 vTextureCoord;
@@ -12,16 +39,6 @@ uniform sampler2D uSampler;
 void main(void)
 {
 	gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
-    vec2 d1 = vTextureCoord - vec2(0.25, 0.5);
-    vec2 d2 = vTextureCoord - vec2(0.75, 0.5);
-    float dist1sq = dot(d1, d1);
-    float dist2sq = dot(d2, d2);
-    if (dist1sq < 0.1 * 0.1)
-        gl_FragColor += vec4(1.0, 1.0, 1.0, 1.0);
-    else if (dist2sq < 0.1 * 0.1)
-        gl_FragColor += vec4(0.0, 0.0, 0.0, 1.0);
-    else
-        gl_FragColor += vec4(0.5, 0.5, 0.5, 1.0);
 }
 </script>
 <script id="shader-vs" type="x-shader/x-vertex">
@@ -70,50 +87,38 @@ function getShader(gl, id) {
     return shader;
 }
 
-var shaderProgram;
+var laplaceProgram, straightProgram;
 function initShaders() {
-    var fragmentShader = getShader(gl, "shader-fs");
+    var laplaceFragShader = getShader(gl, "shader-fs-laplace");
+    var straightFragShader = getShader(gl, "shader-fs-straight");
     var vertexShader = getShader(gl, "shader-vs");
 
-    shaderProgram = gl.createProgram();
-    gl.attachShader(shaderProgram, vertexShader);
-    gl.attachShader(shaderProgram, fragmentShader);
-    gl.linkProgram(shaderProgram);
+    laplaceProgram = gl.createProgram();
+    gl.attachShader(laplaceProgram, vertexShader);
+    gl.attachShader(laplaceProgram, laplaceFragShader);
+    gl.linkProgram(laplaceProgram);
 
-    gl.useProgram(shaderProgram);
+    laplaceProgram.vertexPositionAttribute = gl.getAttribLocation(laplaceProgram, "aVertexPosition");
+    gl.enableVertexAttribArray(laplaceProgram.vertexPositionAttribute);
+    laplaceProgram.textureCoordAttribute = gl.getAttribLocation(laplaceProgram, "aTextureCoord");
+    gl.enableVertexAttribArray(laplaceProgram.textureCoordAttribute);
+    laplaceProgram.samplerUniform = gl.getUniformLocation(laplaceProgram, "uSampler");
+    
+    straightProgram = gl.createProgram();
+    gl.attachShader(straightProgram, vertexShader);
+    gl.attachShader(straightProgram, straightFragShader);
+    gl.linkProgram(straightProgram);
 
-    shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
-    gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
-
-    shaderProgram.textureCoordAttribute = gl.getAttribLocation(shaderProgram, "aTextureCoord");
-    gl.enableVertexAttribArray(shaderProgram.textureCoordAttribute);
-
-    shaderProgram.samplerUniform = gl.getUniformLocation(shaderProgram, "uSampler");
-}
-
-
-function handleLoadedTexture(texture) {
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, texture.image);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.bindTexture(gl.TEXTURE_2D, null);
-}
-
-
-var neheTexture;
-function initTexture() {
-    neheTexture = gl.createTexture();
-    neheTexture.image = new Image();
-    neheTexture.image.onload = function() {
-        handleLoadedTexture(neheTexture)
-    }
-    neheTexture.image.src = "tex.png";
+    straightProgram.vertexPositionAttribute = gl.getAttribLocation(straightProgram, "aVertexPosition");
+    gl.enableVertexAttribArray(straightProgram.vertexPositionAttribute);
+    straightProgram.textureCoordAttribute = gl.getAttribLocation(straightProgram, "aTextureCoord");
+    gl.enableVertexAttribArray(straightProgram.textureCoordAttribute);
+    straightProgram.samplerUniform = gl.getUniformLocation(straightProgram, "uSampler");
 }
 
 var rttFramebuffer;
 var rttTexture;
+var rttTexture2;
 function initTextureFramebuffer() {
     rttFramebuffer = gl.createFramebuffer();
     gl.bindFramebuffer(gl.FRAMEBUFFER, rttFramebuffer);
@@ -124,15 +129,9 @@ function initTextureFramebuffer() {
     gl.bindTexture(gl.TEXTURE_2D, rttTexture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-
-    try {
-        // Do it the way the spec requires
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, rttFramebuffer.width, rttFramebuffer.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    } catch (exception) {
-        // Workaround for what appears to be a Minefield bug.
-        var textureStorage = new WebGLUnsignedByteArray(rttFramebuffer.width * rttFramebuffer.height * 4);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, rttFramebuffer.width, rttFramebuffer.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, textureStorage);
-    }
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT );
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, rttFramebuffer.width, rttFramebuffer.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
     var renderbuffer = gl.createRenderbuffer();
     gl.bindRenderbuffer(gl.RENDERBUFFER, renderbuffer);
@@ -140,7 +139,15 @@ function initTextureFramebuffer() {
 
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, rttTexture, 0);
     gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, renderbuffer);
-
+  
+    rttTexture2 = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, rttTexture2);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT );
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, rttFramebuffer.width, rttFramebuffer.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    
     gl.bindTexture(gl.TEXTURE_2D, null);
     gl.bindRenderbuffer(gl.RENDERBUFFER, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -190,29 +197,33 @@ function initBuffers() {
 function drawScene() {
     gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
 
+    gl.useProgram(laplaceProgram);
+    
     gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexPositionBuffer);
-    gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, cubeVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribPointer(laplaceProgram.vertexPositionAttribute, cubeVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexTextureCoordBuffer);
-    gl.vertexAttribPointer(shaderProgram.textureCoordAttribute, cubeVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribPointer(laplaceProgram.textureCoordAttribute, cubeVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
 
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndexBuffer);
     
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, neheTexture);
-    gl.uniform1i(shaderProgram.samplerUniform, 0);
+    gl.bindTexture(gl.TEXTURE_2D, rttTexture2);
+    gl.uniform1i(laplaceProgram.samplerUniform, 0);
     
     gl.bindFramebuffer(gl.FRAMEBUFFER, rttFramebuffer);
-    
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, rttTexture, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawElements(gl.TRIANGLES, cubeVertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, rttTexture);
-    gl.uniform1i(shaderProgram.samplerUniform, 0);
     
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    var t = rttTexture2;
+    rttTexture2 = rttTexture;
+    rttTexture = t;
+    
+    gl.useProgram(straightProgram);
+    
+    gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawElements(gl.TRIANGLES, cubeVertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
 }
 
@@ -225,17 +236,10 @@ function webGLStart() {
     initGL(canvas);
     initShaders();
     initBuffers();
-    initTexture();
     initTextureFramebuffer();
 
     gl.clearColor(0.0, 0.0, 0.0, 1.0);
-
-    gl.clearDepth(1.0);
-
-    gl.enable(gl.DEPTH_TEST);
-    gl.depthFunc(gl.LEQUAL);
-
-    setInterval(tick, 15);
+    setInterval(tick, 0);
 }
 </script>
 </head>
