@@ -16,16 +16,19 @@ void main(void)
     vec2 d2 = vTextureCoord - vec2(0.75, 0.5);
     float dist1sq = dot(d1, d1);
     float dist2sq = dot(d2, d2);
+	
     if (dist1sq < 0.1 * 0.1) {
-        gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+        gl_FragColor = vec4(255.0 / 256.0, 255.0 / 256.0, 0.0, 1.0);
     } else if (dist2sq < 0.1 * 0.1) {
         gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
     } else {
-        gl_FragColor  = 0.249 * texture2D(uSampler, vec2(vTextureCoord.s - delta, vTextureCoord.t - delta));
-        gl_FragColor += 0.249 * texture2D(uSampler, vec2(vTextureCoord.s - delta, vTextureCoord.t + delta));
-        gl_FragColor += 0.249 * texture2D(uSampler, vec2(vTextureCoord.s + delta, vTextureCoord.t - delta));
-        gl_FragColor += 0.249 * texture2D(uSampler, vec2(vTextureCoord.s + delta, vTextureCoord.t + delta));
-        gl_FragColor += (1.0 - 4.0 * 0.249) * 0.5;
+		vec4 wc = texture2D(uSampler, vec2(vTextureCoord.s - delta, vTextureCoord.t));
+		vec4 ec = texture2D(uSampler, vec2(vTextureCoord.s + delta, vTextureCoord.t));
+		vec4 sc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t - delta));
+		vec4 nc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t + delta));
+		float new_val = 0.249 * (wc.r + wc.g / 256.0 + ec.r + ec.g / 256.0 +
+			sc.r + sc.g / 256.0 + nc.r + nc.g / 256.0);
+        gl_FragColor = vec4(new_val, fract(new_val * 256.0), 0.0, 1.0);
     }
 }
 </script>
@@ -38,7 +41,9 @@ uniform sampler2D uSampler;
 
 void main(void)
 {
-	gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+	vec4 src = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+	float brightness = src.r + src.g / 255.0;
+	gl_FragColor = vec4(brightness, brightness, brightness, 1.0);
 }
 </script>
 <script id="shader-vs" type="x-shader/x-vertex">
