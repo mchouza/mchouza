@@ -1,0 +1,181 @@
+<html>
+<head>
+<!-- Based on a WebGL tutorial at http://learningwebgl.com/lessons/lesson05/index.html -->
+<title>WebGL Rounding Demo</title>
+<script id="shader-fs-straight" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+varying vec2 vTextureCoord;
+
+uniform highp sampler2D uSampler;
+uniform int uTexSize;
+
+
+void main(void)
+{
+	vec4 src = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+	gl_FragColor = vec4(0.5, 0.4, 0.0, 1.0);
+}
+</script>
+<script id="shader-vs" type="x-shader/x-vertex">
+attribute vec3 aVertexPosition;
+attribute vec2 aTextureCoord;
+
+varying vec2 vTextureCoord;
+
+void main(void)
+{
+    gl_Position = vec4(aVertexPosition, 1.0);
+    vTextureCoord = aTextureCoord;
+}
+</script>
+<script type="text/javascript">
+var START_N = 8;
+var ITERS_OVER_N = 10;
+var MAX_N = 512;
+
+var gl;
+function initGL(canvas) {
+    gl = canvas.getContext("experimental-webgl");
+    gl.viewportWidth = canvas.width;
+    gl.viewportHeight = canvas.height;
+}
+
+function getShader(gl, id) {
+    var shaderScript = document.getElementById(id);
+    var str = "";
+    var k = shaderScript.firstChild;
+    while (k) {
+        if (k.nodeType == 3) {
+            str += k.textContent;
+        }
+        k = k.nextSibling;
+    }
+
+    var shader;
+    if (shaderScript.type == "x-shader/x-fragment") {
+        shader = gl.createShader(gl.FRAGMENT_SHADER);
+    } else if (shaderScript.type == "x-shader/x-vertex") {
+        shader = gl.createShader(gl.VERTEX_SHADER);
+    } else {
+        return null;
+    }
+
+    gl.shaderSource(shader, str);
+    gl.compileShader(shader);
+
+    return shader;
+}
+
+var laplaceProgram, straightProgram;
+function initShaders() {
+    var straightFragShader = getShader(gl, "shader-fs-straight");
+    var vertexShader = getShader(gl, "shader-vs");
+
+    straightProgram = gl.createProgram();
+    gl.attachShader(straightProgram, vertexShader);
+    gl.attachShader(straightProgram, straightFragShader);
+    gl.linkProgram(straightProgram);
+
+    straightProgram.vertexPositionAttribute = gl.getAttribLocation(straightProgram, "aVertexPosition");
+    gl.enableVertexAttribArray(straightProgram.vertexPositionAttribute);
+    straightProgram.textureCoordAttribute = gl.getAttribLocation(straightProgram, "aTextureCoord");
+    gl.enableVertexAttribArray(straightProgram.textureCoordAttribute);
+    straightProgram.samplerUniform = gl.getUniformLocation(straightProgram, "uSampler");
+    straightProgram.texSizeUniform = gl.getUniformLocation(straightProgram, "uTexSize");
+}
+
+var rttTexture;
+function initTextureFramebuffer(n) {
+    rttTexture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, rttTexture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT );
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, n, n, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    
+    gl.bindTexture(gl.TEXTURE_2D, null);
+}
+
+var cubeVertexPositionBuffer;
+var cubeVertexTextureCoordBuffer;
+var cubeVertexIndexBuffer;
+function initBuffers() {
+    cubeVertexPositionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexPositionBuffer);
+    vertices = [
+        // Front face
+        -1.0, -1.0,  1.0,
+         1.0, -1.0,  1.0,
+         1.0,  1.0,  1.0,
+        -1.0,  1.0,  1.0,
+    ];
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+    cubeVertexPositionBuffer.itemSize = 3;
+    cubeVertexPositionBuffer.numItems = 4;
+
+    cubeVertexTextureCoordBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexTextureCoordBuffer);
+    var textureCoords = [
+        // Front face
+        0.0, 0.0,
+        1.0, 0.0,
+        1.0, 1.0,
+        0.0, 1.0,
+    ];
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(textureCoords), gl.STATIC_DRAW);
+    cubeVertexTextureCoordBuffer.itemSize = 2;
+    cubeVertexTextureCoordBuffer.numItems = 4;
+
+    cubeVertexIndexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndexBuffer);
+    var cubeVertexIndices = [
+        0, 1, 2, 0, 2, 3,    // Front face
+    ]
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(cubeVertexIndices), gl.STATIC_DRAW);
+    cubeVertexIndexBuffer.itemSize = 1;
+    cubeVertexIndexBuffer.numItems = 6;
+}
+
+function drawScene() {
+    gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+	
+    gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexPositionBuffer);
+    gl.vertexAttribPointer(straightProgram.vertexPositionAttribute, cubeVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexTextureCoordBuffer);
+    gl.vertexAttribPointer(straightProgram.textureCoordAttribute, cubeVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndexBuffer);
+    
+    gl.activeTexture(gl.TEXTURE0);
+	gl.bindTexture(gl.TEXTURE_2D, rttTexture);
+	
+    gl.useProgram(straightProgram);
+    gl.uniform1i(straightProgram.texSizeUniform, START_N);
+    
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawElements(gl.TRIANGLES, cubeVertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+}
+
+function tick() {
+    drawScene();
+}
+
+function webGLStart() {
+    var canvas = document.getElementById("lesson05-canvas");
+    initGL(canvas);
+    initShaders();
+    initBuffers();
+    initTextureFramebuffer(START_N);
+
+    setInterval(tick, 0);
+}
+</script>
+</head>
+<body onload="webGLStart();">
+  <canvas id="lesson05-canvas" style="border: none;" width="512" height="512"></canvas>
+</body>
+</html>
