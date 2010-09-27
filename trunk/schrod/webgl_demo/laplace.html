@@ -1,26 +1,28 @@
 <html>
 <head>
-<!-- Based on a WebGL tutorial at http://learningwebgl.com/lessons/lesson05/index.html --><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<!-- Based on a WebGL tutorial at http://learningwebgl.com/lessons/lesson05/index.html -->
 <title>Solving Laplace Equation with WebGL</title>
 <script id="shader-fs-laplace" type="x-shader/x-fragment">
 precision highp float;
+precision highp int;
 
 varying vec2 vTextureCoord;
 
-uniform sampler2D uSampler;
+uniform highp sampler2D uSampler;
+uniform int uTexSize;
 
 void main(void)
 {
-    const float delta = 1.0 / 512.0;
+    float delta = 1.0 / float(uTexSize);
     vec2 d1 = vTextureCoord - vec2(0.25, 0.5);
     vec2 d2 = vTextureCoord - vec2(0.75, 0.5);
-	d1 = vec2(d1.x, 0.0);
-	d2 = vec2(d2.x, 0.0);
+    d1 = vec2(d1.x, 0.0);
+    d2 = vec2(d2.x, 0.0);
     float dist1sq = dot(d1, d1);
     float dist2sq = dot(d2, d2);
 	
     if (dist1sq < 0.1 * 0.1) {
-        gl_FragColor = vec4(255.0 / 256.0, 255.0 / 256.0, 0.0, 1.0);
+        gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
     } else if (dist2sq < 0.1 * 0.1) {
         gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
     } else {
@@ -28,26 +30,88 @@ void main(void)
 		vec4 ec = texture2D(uSampler, vec2(vTextureCoord.s + delta, vTextureCoord.t));
 		vec4 sc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t - delta));
 		vec4 nc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t + delta));
-		float new_val = 0.249 * (wc.r + wc.g / 256.0 + ec.r + ec.g / 256.0 +
-			sc.r + sc.g / 256.0 + nc.r + nc.g / 256.0);
-        gl_FragColor = vec4(new_val, fract(new_val * 256.0), 0.0, 1.0);
+        float t = (wc.r + ec.r + nc.r + sc.r) / 4.0 +
+            (wc.g + ec.g + nc.g + sc.g) / (4.0 * 256.0) +
+            (wc.b + ec.b + nc.b + sc.b) / (4.0 * 256.0 * 256.0);
+        float lo = fract(256.0 * 256.0 * t);
+        t -= lo / (256.0 * 256.0);
+        float med = fract(256.0 * t);
+        t -= med / 256.0;
+        float hi = t;
+        gl_FragColor = vec4(hi, med, lo, 1.0);
     }
 }
 </script>
 <script id="shader-fs-straight" type="x-shader/x-fragment">
 precision highp float;
+precision highp int;
 
 varying vec2 vTextureCoord;
 
-uniform sampler2D uSampler;
+uniform highp sampler2D uSampler;
+uniform int uTexSize;
+
 
 void main(void)
 {
 	vec4 src = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
-	float brightness = src.r + src.g / 255.0;
-	brightness = brightness - mod(brightness, 0.05);
+	float brightness = (255.0 / 256.0) * src.r + (255.0 / 65536.0) * src.g + (1.0 / 65536.0) * src.b;
+	//brightness = brightness - mod(brightness, 0.1);
 	gl_FragColor = vec4(brightness, brightness, brightness, 1.0);
 }
+
+/*
+void main(void)
+{
+    vec4 src = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+	float brightness = (uTexSize == 16) ? 1.0 : 0.0;
+	gl_FragColor = vec4(brightness, brightness, brightness, 1.0);
+}
+*/
+/*
+void main(void)
+{
+    const float delta = 1.0 / 512.0;
+	
+    vec4 c = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+    vec4 wc = texture2D(uSampler, vec2(vTextureCoord.s - delta, vTextureCoord.t));
+    vec4 ec = texture2D(uSampler, vec2(vTextureCoord.s + delta, vTextureCoord.t));
+    vec4 sc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t - delta));
+    vec4 nc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t + delta));
+    float t = (wc.r + ec.r + nc.r + sc.r - 4.0 * c.r);
+    t = 10.0 * abs(t);
+    gl_FragColor = vec4(t, t, t, 1.0);
+}
+*/
+/*
+void main(void)
+{
+    float delta = 1.0 / float(uTexSize);
+	
+    vec4 c = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+    vec4 wc = texture2D(uSampler, vec2(vTextureCoord.s - delta, vTextureCoord.t));
+    vec4 ec = texture2D(uSampler, vec2(vTextureCoord.s + delta, vTextureCoord.t));
+    vec4 sc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t - delta));
+    vec4 nc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t + delta));
+    float t = abs(c.r - ec.r);
+    t = 10.0 * abs(t);
+    gl_FragColor = vec4(t, t, t, 1.0);
+}
+*/
+/*
+void main(void)
+{
+    float delta = 1.0 / float(uTexSize);
+    vec4 c = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+    vec4 wc = texture2D(uSampler, vec2(vTextureCoord.s - delta, vTextureCoord.t));
+    vec4 ec = texture2D(uSampler, vec2(vTextureCoord.s + delta, vTextureCoord.t));
+    vec4 sc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t - delta));
+    vec4 nc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t + delta));
+    float lap = c.r - (wc.r + ec.r + nc.r + sc.r) / 4.0;
+    lap *= 10.0;
+    gl_FragColor = vec4(lap, lap, lap, 1.0);
+}
+*/
 </script>
 <script id="shader-vs" type="x-shader/x-vertex">
 attribute vec3 aVertexPosition;
@@ -62,6 +126,10 @@ void main(void)
 }
 </script>
 <script type="text/javascript">
+var START_N = 8;
+var ITERS_OVER_N = 10;
+var MAX_N = 512;
+
 var gl;
 function initGL(canvas) {
     gl = canvas.getContext("experimental-webgl");
@@ -111,6 +179,7 @@ function initShaders() {
     laplaceProgram.textureCoordAttribute = gl.getAttribLocation(laplaceProgram, "aTextureCoord");
     gl.enableVertexAttribArray(laplaceProgram.textureCoordAttribute);
     laplaceProgram.samplerUniform = gl.getUniformLocation(laplaceProgram, "uSampler");
+    laplaceProgram.texSizeUniform = gl.getUniformLocation(laplaceProgram, "uTexSize");
     
     straightProgram = gl.createProgram();
     gl.attachShader(straightProgram, vertexShader);
@@ -122,21 +191,22 @@ function initShaders() {
     straightProgram.textureCoordAttribute = gl.getAttribLocation(straightProgram, "aTextureCoord");
     gl.enableVertexAttribArray(straightProgram.textureCoordAttribute);
     straightProgram.samplerUniform = gl.getUniformLocation(straightProgram, "uSampler");
+    straightProgram.texSizeUniform = gl.getUniformLocation(straightProgram, "uTexSize");
 }
 
 var rttFramebuffer;
 var rttTexture;
 var rttTexture2;
-function initTextureFramebuffer() {
+function initTextureFramebuffer(n) {
     rttFramebuffer = gl.createFramebuffer();
     gl.bindFramebuffer(gl.FRAMEBUFFER, rttFramebuffer);
-    rttFramebuffer.width = 512;
-    rttFramebuffer.height = 512;
+    rttFramebuffer.width = n;
+    rttFramebuffer.height = n;
 
     rttTexture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, rttTexture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT );
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT );
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, rttFramebuffer.width, rttFramebuffer.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
@@ -150,8 +220,8 @@ function initTextureFramebuffer() {
   
     rttTexture2 = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, rttTexture2);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT );
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT );
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, rttFramebuffer.width, rttFramebuffer.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
@@ -159,6 +229,19 @@ function initTextureFramebuffer() {
     gl.bindTexture(gl.TEXTURE_2D, null);
     gl.bindRenderbuffer(gl.RENDERBUFFER, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
+function updateTextureFramebuffer(n) {
+    var oldTex = rttTexture2;
+    
+    initTextureFramebuffer(n);
+    
+    var newTex = rttTexture2;
+    rttTexture2 = oldTex;
+    
+    updateState();
+    
+    rttTexture = newTex;
 }
 
 var cubeVertexPositionBuffer;
@@ -170,8 +253,8 @@ function initBuffers() {
     vertices = [
         // Front face
         -1.0, -1.0,  1.0,
-        1.0, -1.0,  1.0,
-        1.0,  1.0,  1.0,
+         1.0, -1.0,  1.0,
+         1.0,  1.0,  1.0,
         -1.0,  1.0,  1.0,
     ];
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
@@ -194,18 +277,17 @@ function initBuffers() {
     cubeVertexIndexBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndexBuffer);
     var cubeVertexIndices = [
-        0, 1, 2,      0, 2, 3,    // Front face
+        0, 1, 2, 0, 2, 3,    // Front face
     ]
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(cubeVertexIndices), gl.STATIC_DRAW);
     cubeVertexIndexBuffer.itemSize = 1;
     cubeVertexIndexBuffer.numItems = 6;
 }
 
-
-function drawScene() {
+function updateState() {
     gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
-
     gl.useProgram(laplaceProgram);
+    gl.uniform1i(laplaceProgram.texSizeUniform, rttFramebuffer.width);
     
     gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexPositionBuffer);
     gl.vertexAttribPointer(laplaceProgram.vertexPositionAttribute, cubeVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
@@ -228,15 +310,27 @@ function drawScene() {
     var t = rttTexture2;
     rttTexture2 = rttTexture;
     rttTexture = t;
-    
+}
+
+function drawScene() {
+    gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
     gl.useProgram(straightProgram);
+    gl.uniform1i(straightProgram.texSizeUniform, rttFramebuffer.width);
     
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawElements(gl.TRIANGLES, cubeVertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
 }
 
+var iterNum = 0;
+var n = START_N;
 function tick() {
+    if (iterNum > 0 && iterNum % (n * ITERS_OVER_N) == 0 && n * 2 <= MAX_N) {
+        n *= 2;
+        updateTextureFramebuffer(n);
+    }
+    updateState();
     drawScene();
+    iterNum++;
 }
 
 function webGLStart() {
@@ -244,9 +338,8 @@ function webGLStart() {
     initGL(canvas);
     initShaders();
     initBuffers();
-    initTextureFramebuffer();
+    initTextureFramebuffer(START_N);
 
-    gl.clearColor(0.0, 0.0, 0.0, 1.0);
     setInterval(tick, 0);
 }
 </script>
