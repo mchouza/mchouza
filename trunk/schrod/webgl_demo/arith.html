@@ -9,13 +9,23 @@ precision highp int;
 varying vec2 vTextureCoord;
 
 uniform highp sampler2D uSampler;
-uniform int uTexSize;
-
 
 void main(void)
 {
-	vec4 src = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
-	gl_FragColor = vec4(0.5, 0.4, 0.0, 1.0);
+    vec4 c = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+    if (c == vec4(0.0, 0.0, 0.0, 0.0)) {
+        gl_FragColor = vec4(1.0 + 1.0 / (8.0 * 1048576.0), 0.0, 0.0, 1.0);
+        //gl_FragColor = vec4(1.0 + 1.0 / (16.0 * 1048576.0), 0.0, 0.0, 1.0);
+        if (gl_FragColor.r != 1.0) {
+            gl_FragColor = vec4(1.0 / 255.0, 0.0, 0.0, 1.0);
+        }
+    } else {
+        if (c.r == 1.0 / 255.0) {
+            gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0);
+        } else {
+            gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+        }
+    }
 }
 </script>
 <script id="shader-vs" type="x-shader/x-vertex">
@@ -68,7 +78,7 @@ function getShader(gl, id) {
     return shader;
 }
 
-var laplaceProgram, straightProgram;
+var straightProgram;
 function initShaders() {
     var straightFragShader = getShader(gl, "shader-fs-straight");
     var vertexShader = getShader(gl, "shader-vs");
@@ -83,11 +93,16 @@ function initShaders() {
     straightProgram.textureCoordAttribute = gl.getAttribLocation(straightProgram, "aTextureCoord");
     gl.enableVertexAttribArray(straightProgram.textureCoordAttribute);
     straightProgram.samplerUniform = gl.getUniformLocation(straightProgram, "uSampler");
-    straightProgram.texSizeUniform = gl.getUniformLocation(straightProgram, "uTexSize");
 }
 
+var rttFramebuffer;
 var rttTexture;
+var rttTexture2;
 function initTextureFramebuffer(n) {
+    rttFramebuffer = gl.createFramebuffer();
+    rttFramebuffer.width = n;
+    rttFramebuffer.height = n;
+
     rttTexture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, rttTexture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
@@ -95,8 +110,29 @@ function initTextureFramebuffer(n) {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT );
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT );
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, n, n, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+
+    rttTexture2 = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, rttTexture2);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT );
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, n, n, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     
     gl.bindTexture(gl.TEXTURE_2D, null);
+}
+
+function updateTextureFramebuffer(n) {
+    var oldTex = rttTexture2;
+    
+    initTextureFramebuffer(n);
+    
+    var newTex = rttTexture2;
+    rttTexture2 = oldTex;
+    
+    updateState();
+    
+    rttTexture = newTex;
 }
 
 var cubeVertexPositionBuffer;
@@ -144,19 +180,20 @@ function drawScene() {
 	
     gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexPositionBuffer);
     gl.vertexAttribPointer(straightProgram.vertexPositionAttribute, cubeVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
-
     gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexTextureCoordBuffer);
     gl.vertexAttribPointer(straightProgram.textureCoordAttribute, cubeVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
-
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndexBuffer);
-    
     gl.activeTexture(gl.TEXTURE0);
-	gl.bindTexture(gl.TEXTURE_2D, rttTexture);
-	
     gl.useProgram(straightProgram);
-    gl.uniform1i(straightProgram.texSizeUniform, START_N);
     
-    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, rttFramebuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, rttTexture2, 0);
+    gl.bindTexture(gl.TEXTURE_2D, rttTexture);
+    gl.drawElements(gl.TRIANGLES, cubeVertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+    
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, null, 0);
+    gl.bindTexture(gl.TEXTURE_2D, rttTexture2);
     gl.drawElements(gl.TRIANGLES, cubeVertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
 }
 
