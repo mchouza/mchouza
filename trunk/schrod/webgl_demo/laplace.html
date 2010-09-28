@@ -16,8 +16,6 @@ void main(void)
     float delta = 1.0 / float(uTexSize);
     vec2 d1 = vTextureCoord - vec2(0.25, 0.5);
     vec2 d2 = vTextureCoord - vec2(0.75, 0.5);
-    d1 = vec2(d1.x, 0.0);
-    d2 = vec2(d2.x, 0.0);
     float dist1sq = dot(d1, d1);
     float dist2sq = dot(d2, d2);
 	
@@ -30,15 +28,12 @@ void main(void)
 		vec4 ec = texture2D(uSampler, vec2(vTextureCoord.s + delta, vTextureCoord.t));
 		vec4 sc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t - delta));
 		vec4 nc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t + delta));
-        float t = (wc.r + ec.r + nc.r + sc.r) / 4.0 +
-            (wc.g + ec.g + nc.g + sc.g) / (4.0 * 256.0) +
-            (wc.b + ec.b + nc.b + sc.b) / (4.0 * 256.0 * 256.0);
-        float lo = fract(256.0 * 256.0 * t);
-        t -= lo / (256.0 * 256.0);
-        float med = fract(256.0 * t);
-        t -= med / 256.0;
-        float hi = t;
-        gl_FragColor = vec4(hi, med, lo, 1.0);
+        float val = (wc.r + ec.r + nc.r + sc.r) / 4.0 +
+			(wc.g + ec.g + nc.g + sc.g) / (4.0 * 255.0);
+		float hi = val - mod(val, 1.0 / 255.0);
+		val = (val - hi) * 255.0;
+		float lo = val;
+        gl_FragColor = vec4(hi, lo, 0.0, 1.0);
     }
 }
 </script>
@@ -55,63 +50,9 @@ uniform int uTexSize;
 void main(void)
 {
 	vec4 src = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
-	float brightness = (255.0 / 256.0) * src.r + (255.0 / 65536.0) * src.g + (1.0 / 65536.0) * src.b;
-	//brightness = brightness - mod(brightness, 0.1);
+	float brightness = src.r;
 	gl_FragColor = vec4(brightness, brightness, brightness, 1.0);
 }
-
-/*
-void main(void)
-{
-    vec4 src = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
-	float brightness = (uTexSize == 16) ? 1.0 : 0.0;
-	gl_FragColor = vec4(brightness, brightness, brightness, 1.0);
-}
-*/
-/*
-void main(void)
-{
-    const float delta = 1.0 / 512.0;
-	
-    vec4 c = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
-    vec4 wc = texture2D(uSampler, vec2(vTextureCoord.s - delta, vTextureCoord.t));
-    vec4 ec = texture2D(uSampler, vec2(vTextureCoord.s + delta, vTextureCoord.t));
-    vec4 sc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t - delta));
-    vec4 nc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t + delta));
-    float t = (wc.r + ec.r + nc.r + sc.r - 4.0 * c.r);
-    t = 10.0 * abs(t);
-    gl_FragColor = vec4(t, t, t, 1.0);
-}
-*/
-/*
-void main(void)
-{
-    float delta = 1.0 / float(uTexSize);
-	
-    vec4 c = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
-    vec4 wc = texture2D(uSampler, vec2(vTextureCoord.s - delta, vTextureCoord.t));
-    vec4 ec = texture2D(uSampler, vec2(vTextureCoord.s + delta, vTextureCoord.t));
-    vec4 sc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t - delta));
-    vec4 nc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t + delta));
-    float t = abs(c.r - ec.r);
-    t = 10.0 * abs(t);
-    gl_FragColor = vec4(t, t, t, 1.0);
-}
-*/
-/*
-void main(void)
-{
-    float delta = 1.0 / float(uTexSize);
-    vec4 c = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
-    vec4 wc = texture2D(uSampler, vec2(vTextureCoord.s - delta, vTextureCoord.t));
-    vec4 ec = texture2D(uSampler, vec2(vTextureCoord.s + delta, vTextureCoord.t));
-    vec4 sc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t - delta));
-    vec4 nc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t + delta));
-    float lap = c.r - (wc.r + ec.r + nc.r + sc.r) / 4.0;
-    lap *= 10.0;
-    gl_FragColor = vec4(lap, lap, lap, 1.0);
-}
-*/
 </script>
 <script id="shader-vs" type="x-shader/x-vertex">
 attribute vec3 aVertexPosition;
