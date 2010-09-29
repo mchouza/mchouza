@@ -1,15 +1,5 @@
 <html>
-<head>
-	<title>WebGL Schr&ouml;dinger Equation Simulator</title>
-</head>
-<body>
-	<canvas id="mainCanvas" height="512" width="512"></canvas>
-	<div style="width: 256; text-align:right">
-		<p style="font-size:12px">Por <a href="http://chouza.com.ar">Mariano M. Chouza</a>.</p>
-	</div>
-</body>
-<script>
-/*
+<!--
 Copyright (c) 2010 Mariano M. Chouza
 
 Permission is hereby granted, free of charge, to any person
@@ -32,8 +22,46 @@ HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
 WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
-*/
+-->
+<head>
+	<title>WebGL Schr&ouml;dinger Equation Simulator</title>
+</head>
+<body>
+	<canvas id="mainCanvas" height="512" width="512"></canvas>
+	<div style="width: 256; text-align:right">
+		<p style="font-size:12px">Por <a href="http://chouza.com.ar">Mariano M. Chouza</a>.</p>
+	</div>
+</body>
+<script id="shader-vs" type="x-shader/x-vertex">
+attribute vec3 aVertexPosition;
+attribute vec2 aTextureCoord;
 
+varying vec2 vTextureCoord;
+
+void main(void)
+{
+    gl_Position = vec4(aVertexPosition, 1.0);
+    vTextureCoord = aTextureCoord;
+}
+</script>
+<script id="shader-fs-visualization" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+varying vec2 vTextureCoord;
+
+uniform highp sampler2D uSampler;
+uniform int uTexSize;
+
+void main(void)
+{
+	vec4 src = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+	float brightness = src.r;
+	//gl_FragColor = vec4(brightness, brightness, brightness, 1.0);
+    gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+}
+</script>
+<script>
 function $(id) {
 	return document.getElementById(id);
 }
@@ -43,8 +71,16 @@ var step = (function(){
 	// closure vars
 	//
 	
+    // GL parameters
+    var SHADER_PROGS = {
+        'visualization': ['shader-vs', 'shader-fs-visualization']
+    };
+    
+    // GL common stuff
+    var gl = null;
+    var shaderProgs = null;
+    
 	// visualization data
-	var ctx = $('mainCanvas').getContext('experimental-webgl');
 	var controls = null;
 	
 	// simulation parameters ("constants")
@@ -56,12 +92,64 @@ var step = (function(){
 	// simulation associated parameters (also constant)
 	
 	// simulation vars
+    var simFB = null;
     var simTexMgr = null;
 	
 	//
 	// closure functions
 	//
+    
+    // WebGL initialization
+    function initGL() {
+        // basic GL init
+        var canvas = $('mainCanvas');
+        gl = canvas.getContext('experimental-webgl');
+        gl.viewportWidth = canvas.width;
+        gl.viewportHeight = canvas.height;
         
+        // loading shaders
+        var scriptElems = document.getElementsByTagName('script');
+        var vertexShaders = {};
+        var fragmentShaders = {};
+        for (var i = 0; i < scriptElems.length; i++) {
+            // creates the shader object
+            var shader = null;
+            var type = scriptElems[i].type;
+            if (type === 'x-shader/x-vertex') {
+                shader = vertexShaders[scriptElems[i].id] = gl.createShader(gl.VERTEX_SHADER);
+            } else if (type === 'x-shader/x-fragment') {
+                shader = fragmentShaders[scriptElems[i].id] = gl.createShader(gl.FRAGMENT_SHADER);
+            } else {
+                continue;
+            }
+            
+            // gets the shader source code
+            var shaderSrc = '';
+            var txtNode = scriptElems[i].firstChild;
+            while (txtNode) {
+                if (txtNode.nodeType === 3) {
+                    shaderSrc += txtNode.textContent;
+                }
+                txtNode = txtNode.nextSibling;
+            }
+            
+            // sets the source & compiles the shader
+            gl.shaderSource(shader, shaderSrc);
+            gl.compileShader(shader);
+            
+            // the shader is referenced in the map
+        }
+        
+        // builds the required programs
+        shaderProgs = {};
+        for (var progName in SHADER_PROGS) {
+            var prog = gl.createProgram();
+            gl.attachShader(prog, vertexShaders[SHADER_PROGS[progName][0]]);
+            gl.attachShader(prog, vertexShaders[SHADER_PROGS[progName][1]]);
+            gl.linkProgram(prog);
+        }
+    }
+    
 	// interface initialization
 	function initInterface() {
 		$('mainCanvas').onmousedown = onMouseDown;
@@ -74,8 +162,18 @@ var step = (function(){
 	
     // simulation texture manager creation
     function createSimTexMgr(texNamesList, w, h) {
-        // FIXME: IMPLEMENT
-        // RETURN A MAP FROM TEXTURE NAME TO TEXTURE OBJECT
+        var ret = {};
+        for (var i = 0; i < texNamesList.length; i++) {
+            var tex = ret[texNamesList[i]] = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, tex);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT );
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT );
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.viewportWidth, gl.viewportHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        }
+        gl.bindTexture(gl.TEXTURE_2D, null);
+        return ret;
     }
     
     // loads an initial wavefunction
@@ -92,6 +190,11 @@ var step = (function(){
 	function initSimulation() {
         // creates all the required textures
         simTexMgr = createSimTexMgr(TEXTURE_NAMES, 512, 512);
+        
+        // creates the framebuffer
+        simFB = gl.createFramebuffer();
+        simFB.width = 512;
+        simFB.height = 512;
     
         // loads simulation parameters
         loadInitialPsi();
@@ -100,6 +203,7 @@ var step = (function(){
 	
 	// initialization
 	function init() {
+        initGL();
 		initInterface();
 		initSimulation();
 	}
@@ -153,7 +257,9 @@ var step = (function(){
     
 	// draws the simulation area
 	function drawArea(rect) {
-		// FIXME: IMPLEMENT
+        gl.viewport(rect[0], rect[1], rect[2], rect[3]);
+        gl.useProgram(shaderProgs.visualization);
+        gl.drawElements(gl.TRIANGLES, 2, gl.UNSIGNED_SHORT, 0);
 	}
     
 	// draws all the visualization items
@@ -212,10 +318,7 @@ var step = (function(){
 	
 	init();
 	return function() {		
-		if (!paused) {
-            update();
-		}
-		
+        update();
 		draw();
 	}
 })();
