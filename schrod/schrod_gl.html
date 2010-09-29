@@ -1,0 +1,226 @@
+<html>
+<head>
+	<title>WebGL Schr&ouml;dinger Equation Simulator</title>
+</head>
+<body>
+	<canvas id="mainCanvas" height="512" width="512"></canvas>
+	<div style="width: 256; text-align:right">
+		<p style="font-size:12px">Por <a href="http://chouza.com.ar">Mariano M. Chouza</a>.</p>
+	</div>
+</body>
+<script>
+/*
+Copyright (c) 2010 Mariano M. Chouza
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use,
+copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+*/
+
+function $(id) {
+	return document.getElementById(id);
+}
+
+var step = (function(){
+	//
+	// closure vars
+	//
+	
+	// visualization data
+	var ctx = $('mainCanvas').getContext('experimental-webgl');
+	var controls = null;
+	
+	// simulation parameters ("constants")
+    var TEXTURE_NAMES = [
+        'psi', 'new-psi', 'psi-k1-src', 'psi-k2-src', 'psi-k3-src', 'psi-k4-src',
+        'psi-dot', 'psi-dot-k1', 'psi-dot-k2', 'psi-dot-k3', 'psi-dot-k4'
+    ];
+	
+	// simulation associated parameters (also constant)
+	
+	// simulation vars
+    var simTexMgr = null;
+	
+	//
+	// closure functions
+	//
+        
+	// interface initialization
+	function initInterface() {
+		$('mainCanvas').onmousedown = onMouseDown;
+		$('mainCanvas').onmouseup = onMouseUp;
+		$('mainCanvas').onmousemove = onMouseMove;
+		controls = [
+			[[0, 0, 512, 512], onArea, drawArea]
+		];
+	}
+	
+    // simulation texture manager creation
+    function createSimTexMgr(texNamesList, w, h) {
+        // FIXME: IMPLEMENT
+        // RETURN A MAP FROM TEXTURE NAME TO TEXTURE OBJECT
+    }
+    
+    // loads an initial wavefunction
+    function loadInitialPsi() {
+        // FIXME: IMPLEMENT
+    }
+    
+    // loads the potential
+    function loadV() {
+        // FIXME: IMPLEMENT
+    }
+    
+	// simulation initialization
+	function initSimulation() {
+        // creates all the required textures
+        simTexMgr = createSimTexMgr(TEXTURE_NAMES, 512, 512);
+    
+        // loads simulation parameters
+        loadInitialPsi();
+        loadV();
+	}
+	
+	// initialization
+	function init() {
+		initInterface();
+		initSimulation();
+	}
+	
+    // calculates derivatives
+    function calcDerivs(psiDotTexName, psiTexName) {
+        // FIXME: IMPLEMENT
+    }
+    
+    // does an euler step
+    function eulerStep(newPsiTexName, psiTexName, psiDotTexName) {
+        // FIXME: IMPLEMENT
+    }
+    
+    // does the RK4 derivatives merge step
+    function rk4Merge(psiDotTexName, psiDotK1TexName, psiDotK2TexName, psiDotK3TexName, psiDotK4TexName) {
+        // FIXME: IMPLEMENT
+    }
+    
+    // updates the simulation
+    function update() {
+        // i hbar d/dt psi = -hbar^2/(2m) lap psi + v psi
+        // hbar = m = 1
+        // i d/dt psi = -1/2 lap psi + v psi
+        // d/dt psi = i/2 lap psi - i v psi
+        // d/dt (psi_r + i psi_i) = i/2 lap (psi_r + i psi_i) - i v (psi_r + i psi_i)
+        // d/dt (psi_r + i psi_i) = i/2 lap psi_r - 1/2 lap psi_i - i v psi_r + v psi_i
+        // d/dt psi_r = -1/2 lap psi_i + v psi_i
+        // d/dt psi_i = 1/2 lap psi_r - v psi_r
+        
+        // the laplacian operator can be aproximated by the following kernel:
+        // [ 0 -1  0 ]
+        // [-1  4 -1 ]
+        // [ 0 -1  0 ]
+        
+        // RK4
+        calcDerivs('psi-dot-k1', 'psi');
+        eulerStep('psi-k2-src', 'psi', 'psi-dot-k1', 0.1);
+        calcDerivs('psi-dot-k2', 'psi-k2-src');
+        eulerStep('psi-k3-src', 'psi', 'psi-dot-k2', 0.1);
+        calcDerivs('psi-dot-k3', 'psi-k3-src');
+        eulerStep('psi-k4-src', 'psi', 'psi-dot-k3', 0.2);
+        calcDerivs('psi-dot-k4', 'psi-k4-src');
+        rk4Merge('psi-dot', 'psi-dot-k1', 'psi-dot-k2', 'psi-dot-k3', 'psi-dot-k4');
+        eulerStep('new-psi', 'psi', 'psi-dot', 0.2);
+        
+        // updates psi
+        simTexMgr['psi'] = simTexMgr['new-psi'];
+        simTexMgr['new-psi'] = null;
+    }
+    
+	// draws the simulation area
+	function drawArea(rect) {
+		// FIXME: IMPLEMENT
+	}
+    
+	// draws all the visualization items
+	function draw() {		
+		// controls
+		var controlsLen = controls.length;
+		for (var i = 0; i < controlsLen; i++) {
+			var c = controls[i];
+			c[2](c[0]);
+		}
+	}
+	
+	// handles events over the simulation area
+	function onArea(type, x, y) {
+	}
+	
+	// dispatches events to their specific handlers
+	function dispatchEvent(e, type) {
+		// get event position
+		e = e || window.event;
+		var p = [
+			e.clientX - $('mainCanvas').offsetLeft,
+			e.clientY - $('mainCanvas').offsetTop
+		];
+		
+		// call handlers
+		var controlsLen = controls.length;
+		for (var i = 0; i < controlsLen; i++) {
+			var c = controls[i];
+			var dx = p[0] - c[0][0];
+			var dy = p[1] - c[0][1];
+			if (dx >= 0 && dx < c[0][2] && dy >= 0 && dy < c[0][3]){
+				c[1](type, p[0], p[1]);
+			}
+		}
+	}
+	
+	// processes 'onmousedown' events
+	function onMouseDown(e) {
+		dispatchEvent(e, 'down');
+	}
+	
+	// processes 'onmouseup' events
+	function onMouseUp(e) {
+		dispatchEvent(e, 'up');
+	}
+	
+	// processes 'onmousemove' events
+	function onMouseMove(e) {
+		dispatchEvent(e, 'move');
+	}
+	
+	//
+	// initializes the closure vars & returns the step function
+	//
+	
+	init();
+	return function() {		
+		if (!paused) {
+            update();
+		}
+		
+		draw();
+	}
+})();
+
+// starts the simulation run
+setInterval(step, 1000);
+</script>
+</html>
