@@ -51,7 +51,6 @@ precision highp int;
 varying vec2 vTextureCoord;
 
 uniform highp sampler2D uSampler;
-uniform int uTexSize;
 
 void main(void)
 {
@@ -79,6 +78,9 @@ var step = (function(){
     // GL common stuff
     var gl = null;
     var shaderProgs = null;
+    var quadVB = null;
+    var quadTB = null;
+    var quadIB = null;
     
 	// visualization data
 	var controls = null;
@@ -106,6 +108,30 @@ var step = (function(){
         gl = canvas.getContext('experimental-webgl');
         gl.viewportWidth = canvas.width;
         gl.viewportHeight = canvas.height;
+        
+        // sets the vertices buffer
+        quadVB = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, quadVB);
+        gl.bufferData(gl.ARRAY_BUFFER,
+            new Float32Array([-1.0, -1.0, 1.0,
+                               1.0, -1.0, 1.0,
+                               1.0,  1.0, 1.0,
+                              -1.0,  1.0, 1.0]),
+            gl.STATIC_DRAW);
+            
+        // sets the texture coords buffer
+        quadTB = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, quadTB);
+        gl.bufferData(gl.ARRAY_BUFFER,
+            new Float32Array([0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]),
+            gl.STATIC_DRAW);
+        
+        // sets the indices buffer
+        quadIB = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, quadIB);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
+            new Uint16Array([0, 1, 2, 0, 2, 3]),
+            gl.STATIC_DRAW);
         
         // loading shaders
         var scriptElems = document.getElementsByTagName('script');
@@ -144,9 +170,20 @@ var step = (function(){
         shaderProgs = {};
         for (var progName in SHADER_PROGS) {
             var prog = gl.createProgram();
+            
+            // attaches shaders & links the program
             gl.attachShader(prog, vertexShaders[SHADER_PROGS[progName][0]]);
-            gl.attachShader(prog, vertexShaders[SHADER_PROGS[progName][1]]);
+            gl.attachShader(prog, fragmentShaders[SHADER_PROGS[progName][1]]);
             gl.linkProgram(prog);
+            
+            // links attributes & uniforms
+            prog.vertexPositionAttribute = gl.getAttribLocation(prog, "aVertexPosition");
+            gl.enableVertexAttribArray(prog.vertexPositionAttribute);
+            prog.textureCoordAttribute = gl.getAttribLocation(prog, "aTextureCoord");
+            gl.enableVertexAttribArray(prog.textureCoordAttribute);
+            prog.samplerUniform = gl.getUniformLocation(prog, "uSampler");
+            
+            shaderProgs[progName] = prog;
         }
     }
     
@@ -259,6 +296,18 @@ var step = (function(){
 	function drawArea(rect) {
         gl.viewport(rect[0], rect[1], rect[2], rect[3]);
         gl.useProgram(shaderProgs.visualization);
+        
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, simTexMgr.psi);
+        
+        // sets specific values
+        gl.bindBuffer(gl.ARRAY_BUFFER, quadVB);
+        gl.vertexAttribPointer(shaderProgs.visualization.vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, quadTB);
+        gl.vertexAttribPointer(shaderProgs.visualization.textureCoordAttribute, 2, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, quadIB);
+        gl.uniform1i(shaderProgs.visualization.samplerUniform, 0);
+        
         gl.drawElements(gl.TRIANGLES, 2, gl.UNSIGNED_SHORT, 0);
 	}
     
@@ -318,7 +367,7 @@ var step = (function(){
 	
 	init();
 	return function() {		
-        update();
+        //update();
 		draw();
 	}
 })();
