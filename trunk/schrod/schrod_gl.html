@@ -1,4 +1,6 @@
 <html>
+<head>
+<!-- Some sections based on a WebGL tutorial at http://learningwebgl.com/lessons/lesson05/index.html -->
 <!--
 Copyright (c) 2010 Mariano M. Chouza
 
@@ -23,15 +25,59 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 -->
-<head>
-	<title>WebGL Schr&ouml;dinger Equation Simulator</title>
-</head>
-<body>
-	<canvas id="mainCanvas" height="512" width="512"></canvas>
-	<div style="width: 256; text-align:right">
-		<p style="font-size:12px">Por <a href="http://chouza.com.ar">Mariano M. Chouza</a>.</p>
-	</div>
-</body>
+<title>WebGL Schr&ouml;dinger Simulator</title>
+<script id="shader-fs-laplace" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+varying vec2 vTextureCoord;
+
+uniform highp sampler2D uSampler;
+uniform int uTexSize;
+
+void main(void)
+{
+    float delta = 1.0 / float(uTexSize);
+    vec2 d1 = vTextureCoord - vec2(0.25, 0.5);
+    vec2 d2 = vTextureCoord - vec2(0.75, 0.5);
+    float dist1sq = dot(d1, d1);
+    float dist2sq = dot(d2, d2);
+	
+    if (dist1sq < 0.1 * 0.1) {
+        gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+    } else if (dist2sq < 0.1 * 0.1) {
+        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    } else {
+		vec4 wc = texture2D(uSampler, vec2(vTextureCoord.s - delta, vTextureCoord.t));
+		vec4 ec = texture2D(uSampler, vec2(vTextureCoord.s + delta, vTextureCoord.t));
+		vec4 sc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t - delta));
+		vec4 nc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t + delta));
+        float val = (wc.r + ec.r + nc.r + sc.r) / 4.0 +
+			(wc.g + ec.g + nc.g + sc.g) / (4.0 * 255.0);
+		float hi = val - mod(val, 1.0 / 255.0);
+		val = (val - hi) * 255.0;
+		float lo = val;
+        gl_FragColor = vec4(hi, lo, 0.0, 1.0);
+    }
+}
+</script>
+<script id="shader-fs-straight" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+varying vec2 vTextureCoord;
+
+uniform highp sampler2D uSampler;
+uniform int uTexSize;
+
+
+void main(void)
+{
+	vec4 src = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+	float brightness = src.r;
+	gl_FragColor = vec4(brightness, brightness, brightness, 1.0);
+}
+</script>
 <script id="shader-vs" type="x-shader/x-vertex">
 attribute vec3 aVertexPosition;
 attribute vec2 aTextureCoord;
@@ -44,335 +90,206 @@ void main(void)
     vTextureCoord = aTextureCoord;
 }
 </script>
-<script id="shader-fs-visualization" type="x-shader/x-fragment">
-precision highp float;
-precision highp int;
+<script type="text/javascript">
+var N = 64;
+var PROGRAMS = {
+    'laplace': ['shader-vs', 'shader-fs-laplace'],
+    'straight': ['shader-vs', 'shader-fs-straight']
+};
+var TEXTURES = ['psi', 'psiNew'];
+var BUFFERS = {
+    'quadVB': {
+        'type': 'v',
+        'data': [
+            -1.0, -1.0,  1.0,
+             1.0, -1.0,  1.0,
+             1.0,  1.0,  1.0,
+            -1.0,  1.0,  1.0
+        ]
+    },
+    'quadTB': {
+        'type': 't',
+        'data': [
+            0.0, 0.0,
+            1.0, 0.0,
+            1.0, 1.0,
+            0.0, 1.0
+        ]
+    },
+    'quadIB': {
+        'type': 'i',
+        'data': [0, 1, 2, 0, 2, 3]
+    }
+};
 
-varying vec2 vTextureCoord;
+function getShader(gl, id) {
+    var shaderScript = document.getElementById(id);
+    var str = "";
+    var k = shaderScript.firstChild;
+    while (k) {
+        if (k.nodeType == 3) {
+            str += k.textContent;
+        }
+        k = k.nextSibling;
+    }
 
-uniform highp sampler2D uSampler;
+    var shader;
+    if (shaderScript.type == "x-shader/x-fragment") {
+        shader = gl.createShader(gl.FRAGMENT_SHADER);
+    } else if (shaderScript.type == "x-shader/x-vertex") {
+        shader = gl.createShader(gl.VERTEX_SHADER);
+    } else {
+        return null;
+    }
 
-void main(void)
-{
-	vec4 src = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
-	float brightness = src.r;
-	//gl_FragColor = vec4(brightness, brightness, brightness, 1.0);
-    gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+    gl.shaderSource(shader, str);
+    gl.compileShader(shader);
+
+    return shader;
+}
+
+function createProgram(progID) {
+    var vertexShader = getShader(gl, PROGRAMS[progID][0]);
+    var fragShader = getShader(gl, PROGRAMS[progID][1]);
+    
+    var prog = gl.createProgram();
+    gl.attachShader(prog, vertexShader);
+    gl.attachShader(prog, fragShader);
+    gl.linkProgram(prog);
+    
+    prog.vertexPositionAttribute = gl.getAttribLocation(prog, "aVertexPosition");
+    gl.enableVertexAttribArray(prog.vertexPositionAttribute);
+    prog.textureCoordAttribute = gl.getAttribLocation(prog, "aTextureCoord");
+    gl.enableVertexAttribArray(prog.textureCoordAttribute);
+    prog.samplerUniform = gl.getUniformLocation(prog, "uSampler");
+    prog.texSizeUniform = gl.getUniformLocation(prog, "uTexSize");
+    
+    return prog;
+}
+
+function createTexture() {
+    var tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT );
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, N, N, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    return tex;
+}
+
+function createBuffer(bd) {
+    var glBufType = gl[{
+        'v': 'ARRAY_BUFFER',
+        't': 'ARRAY_BUFFER',
+        'i': 'ELEMENT_ARRAY_BUFFER'
+    }[bd.type]];
+    var glArrType = {
+        'v': Float32Array,
+        't': Float32Array,
+        'i': Uint16Array
+    }[bd.type];
+    var glItemSize = {
+        'v': 3,
+        't': 2,
+        'i': 1
+    }[bd.type];
+    
+    var buffer = gl.createBuffer();
+    gl.bindBuffer(glBufType, buffer);
+    gl.bufferData(glBufType, new glArrType(bd.data), gl.STATIC_DRAW);
+    gl.bindBuffer(glBufType, null);
+    
+    buffer.itemSize = glItemSize;
+    buffer.numItems = Math.floor(bd.data.length / glItemSize);
+    
+    return buffer;
+}
+
+var gl;
+function initGL(canvas) {
+    gl = canvas.getContext("experimental-webgl");
+    gl.viewportWidth = canvas.width;
+    gl.viewportHeight = canvas.height;
+}
+
+var progs = {};
+function initShaders() {
+    for (var progID in PROGRAMS) {
+        progs[progID] = createProgram(progID);
+    }
+}
+
+var framebuffer;
+var texs = {};
+function initTextureFramebuffer() {
+    framebuffer = gl.createFramebuffer();
+    for (var i = 0; i < TEXTURES.length; i++) {
+        texs[TEXTURES[i]] = createTexture();
+    }
+}
+
+var buffers = {};
+function initBuffers() {
+    for (var bn in BUFFERS) {
+        buffers[bn] = createBuffer(BUFFERS[bn]);
+    }
+}
+
+function updateState() {
+    gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+    gl.useProgram(progs.laplace);
+    gl.uniform1i(progs.laplace.texSizeUniform, N);
+    
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffers.quadVB);
+    gl.vertexAttribPointer(progs.laplace.vertexPositionAttribute, buffers.quadVB.itemSize, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffers.quadTB);
+    gl.vertexAttribPointer(progs.laplace.textureCoordAttribute, buffers.quadTB.itemSize, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers.quadIB);
+    
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texs.psi);
+    gl.uniform1i(progs.laplace.samplerUniform, 0);
+    
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texs.psiNew, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawElements(gl.TRIANGLES, buffers.quadIB.numItems, gl.UNSIGNED_SHORT, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    
+    var t = texs.psi;
+    texs.psi = texs.psiNew;
+    texs.psiNew = t;
+}
+
+function drawScene() {
+    gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+    gl.useProgram(progs.straight);
+    gl.uniform1i(progs.straight.texSizeUniform, N);
+    
+    gl.drawElements(gl.TRIANGLES, buffers.quadIB.numItems, gl.UNSIGNED_SHORT, 0);
+}
+
+function step() {
+    updateState();
+    drawScene();
+}
+
+function webGLStart() {
+    var canvas = document.getElementById("display-canvas");
+    initGL(canvas);
+    initShaders();
+    initBuffers();
+    initTextureFramebuffer();
+
+    setInterval(step, 0);
 }
 </script>
-<script>
-function $(id) {
-	return document.getElementById(id);
-}
-
-var step = (function(){
-	//
-	// closure vars
-	//
-	
-    // GL parameters
-    var SHADER_PROGS = {
-        'visualization': ['shader-vs', 'shader-fs-visualization']
-    };
-    
-    // GL common stuff
-    var gl = null;
-    var shaderProgs = null;
-    var quadVB = null;
-    var quadTB = null;
-    var quadIB = null;
-    
-	// visualization data
-	var controls = null;
-	
-	// simulation parameters ("constants")
-    var TEXTURE_NAMES = [
-        'psi', 'new-psi', 'psi-k1-src', 'psi-k2-src', 'psi-k3-src', 'psi-k4-src',
-        'psi-dot', 'psi-dot-k1', 'psi-dot-k2', 'psi-dot-k3', 'psi-dot-k4'
-    ];
-	
-	// simulation associated parameters (also constant)
-	
-	// simulation vars
-    var simFB = null;
-    var simTexMgr = null;
-	
-	//
-	// closure functions
-	//
-    
-    // WebGL initialization
-    function initGL() {
-        // basic GL init
-        var canvas = $('mainCanvas');
-        gl = canvas.getContext('experimental-webgl');
-        gl.viewportWidth = canvas.width;
-        gl.viewportHeight = canvas.height;
-        
-        // sets the vertices buffer
-        quadVB = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, quadVB);
-        gl.bufferData(gl.ARRAY_BUFFER,
-            new Float32Array([-1.0, -1.0, 1.0,
-                               1.0, -1.0, 1.0,
-                               1.0,  1.0, 1.0,
-                              -1.0,  1.0, 1.0]),
-            gl.STATIC_DRAW);
-            
-        // sets the texture coords buffer
-        quadTB = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, quadTB);
-        gl.bufferData(gl.ARRAY_BUFFER,
-            new Float32Array([0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]),
-            gl.STATIC_DRAW);
-        
-        // sets the indices buffer
-        quadIB = gl.createBuffer();
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, quadIB);
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
-            new Uint16Array([0, 1, 2, 0, 2, 3]),
-            gl.STATIC_DRAW);
-        
-        // loading shaders
-        var scriptElems = document.getElementsByTagName('script');
-        var vertexShaders = {};
-        var fragmentShaders = {};
-        for (var i = 0; i < scriptElems.length; i++) {
-            // creates the shader object
-            var shader = null;
-            var type = scriptElems[i].type;
-            if (type === 'x-shader/x-vertex') {
-                shader = vertexShaders[scriptElems[i].id] = gl.createShader(gl.VERTEX_SHADER);
-            } else if (type === 'x-shader/x-fragment') {
-                shader = fragmentShaders[scriptElems[i].id] = gl.createShader(gl.FRAGMENT_SHADER);
-            } else {
-                continue;
-            }
-            
-            // gets the shader source code
-            var shaderSrc = '';
-            var txtNode = scriptElems[i].firstChild;
-            while (txtNode) {
-                if (txtNode.nodeType === 3) {
-                    shaderSrc += txtNode.textContent;
-                }
-                txtNode = txtNode.nextSibling;
-            }
-            
-            // sets the source & compiles the shader
-            gl.shaderSource(shader, shaderSrc);
-            gl.compileShader(shader);
-            
-            // the shader is referenced in the map
-        }
-        
-        // builds the required programs
-        shaderProgs = {};
-        for (var progName in SHADER_PROGS) {
-            var prog = gl.createProgram();
-            
-            // attaches shaders & links the program
-            gl.attachShader(prog, vertexShaders[SHADER_PROGS[progName][0]]);
-            gl.attachShader(prog, fragmentShaders[SHADER_PROGS[progName][1]]);
-            gl.linkProgram(prog);
-            
-            // links attributes & uniforms
-            prog.vertexPositionAttribute = gl.getAttribLocation(prog, "aVertexPosition");
-            gl.enableVertexAttribArray(prog.vertexPositionAttribute);
-            prog.textureCoordAttribute = gl.getAttribLocation(prog, "aTextureCoord");
-            gl.enableVertexAttribArray(prog.textureCoordAttribute);
-            prog.samplerUniform = gl.getUniformLocation(prog, "uSampler");
-            
-            shaderProgs[progName] = prog;
-        }
-    }
-    
-	// interface initialization
-	function initInterface() {
-		$('mainCanvas').onmousedown = onMouseDown;
-		$('mainCanvas').onmouseup = onMouseUp;
-		$('mainCanvas').onmousemove = onMouseMove;
-		controls = [
-			[[0, 0, 512, 512], onArea, drawArea]
-		];
-	}
-	
-    // simulation texture manager creation
-    function createSimTexMgr(texNamesList, w, h) {
-        var ret = {};
-        for (var i = 0; i < texNamesList.length; i++) {
-            var tex = ret[texNamesList[i]] = gl.createTexture();
-            gl.bindTexture(gl.TEXTURE_2D, tex);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT );
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT );
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.viewportWidth, gl.viewportHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-        }
-        gl.bindTexture(gl.TEXTURE_2D, null);
-        return ret;
-    }
-    
-    // loads an initial wavefunction
-    function loadInitialPsi() {
-        // FIXME: IMPLEMENT
-    }
-    
-    // loads the potential
-    function loadV() {
-        // FIXME: IMPLEMENT
-    }
-    
-	// simulation initialization
-	function initSimulation() {
-        // creates all the required textures
-        simTexMgr = createSimTexMgr(TEXTURE_NAMES, 512, 512);
-        
-        // creates the framebuffer
-        simFB = gl.createFramebuffer();
-        simFB.width = 512;
-        simFB.height = 512;
-    
-        // loads simulation parameters
-        loadInitialPsi();
-        loadV();
-	}
-	
-	// initialization
-	function init() {
-        initGL();
-		initInterface();
-		initSimulation();
-	}
-	
-    // calculates derivatives
-    function calcDerivs(psiDotTexName, psiTexName) {
-        // FIXME: IMPLEMENT
-    }
-    
-    // does an euler step
-    function eulerStep(newPsiTexName, psiTexName, psiDotTexName) {
-        // FIXME: IMPLEMENT
-    }
-    
-    // does the RK4 derivatives merge step
-    function rk4Merge(psiDotTexName, psiDotK1TexName, psiDotK2TexName, psiDotK3TexName, psiDotK4TexName) {
-        // FIXME: IMPLEMENT
-    }
-    
-    // updates the simulation
-    function update() {
-        // i hbar d/dt psi = -hbar^2/(2m) lap psi + v psi
-        // hbar = m = 1
-        // i d/dt psi = -1/2 lap psi + v psi
-        // d/dt psi = i/2 lap psi - i v psi
-        // d/dt (psi_r + i psi_i) = i/2 lap (psi_r + i psi_i) - i v (psi_r + i psi_i)
-        // d/dt (psi_r + i psi_i) = i/2 lap psi_r - 1/2 lap psi_i - i v psi_r + v psi_i
-        // d/dt psi_r = -1/2 lap psi_i + v psi_i
-        // d/dt psi_i = 1/2 lap psi_r - v psi_r
-        
-        // the laplacian operator can be aproximated by the following kernel:
-        // [ 0 -1  0 ]
-        // [-1  4 -1 ]
-        // [ 0 -1  0 ]
-        
-        // RK4
-        calcDerivs('psi-dot-k1', 'psi');
-        eulerStep('psi-k2-src', 'psi', 'psi-dot-k1', 0.1);
-        calcDerivs('psi-dot-k2', 'psi-k2-src');
-        eulerStep('psi-k3-src', 'psi', 'psi-dot-k2', 0.1);
-        calcDerivs('psi-dot-k3', 'psi-k3-src');
-        eulerStep('psi-k4-src', 'psi', 'psi-dot-k3', 0.2);
-        calcDerivs('psi-dot-k4', 'psi-k4-src');
-        rk4Merge('psi-dot', 'psi-dot-k1', 'psi-dot-k2', 'psi-dot-k3', 'psi-dot-k4');
-        eulerStep('new-psi', 'psi', 'psi-dot', 0.2);
-        
-        // updates psi
-        simTexMgr['psi'] = simTexMgr['new-psi'];
-        simTexMgr['new-psi'] = null;
-    }
-    
-	// draws the simulation area
-	function drawArea(rect) {
-        gl.viewport(rect[0], rect[1], rect[2], rect[3]);
-        gl.useProgram(shaderProgs.visualization);
-        
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, simTexMgr.psi);
-        
-        // sets specific values
-        gl.bindBuffer(gl.ARRAY_BUFFER, quadVB);
-        gl.vertexAttribPointer(shaderProgs.visualization.vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
-        gl.bindBuffer(gl.ARRAY_BUFFER, quadTB);
-        gl.vertexAttribPointer(shaderProgs.visualization.textureCoordAttribute, 2, gl.FLOAT, false, 0, 0);
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, quadIB);
-        gl.uniform1i(shaderProgs.visualization.samplerUniform, 0);
-        
-        gl.drawElements(gl.TRIANGLES, 2, gl.UNSIGNED_SHORT, 0);
-	}
-    
-	// draws all the visualization items
-	function draw() {		
-		// controls
-		var controlsLen = controls.length;
-		for (var i = 0; i < controlsLen; i++) {
-			var c = controls[i];
-			c[2](c[0]);
-		}
-	}
-	
-	// handles events over the simulation area
-	function onArea(type, x, y) {
-	}
-	
-	// dispatches events to their specific handlers
-	function dispatchEvent(e, type) {
-		// get event position
-		e = e || window.event;
-		var p = [
-			e.clientX - $('mainCanvas').offsetLeft,
-			e.clientY - $('mainCanvas').offsetTop
-		];
-		
-		// call handlers
-		var controlsLen = controls.length;
-		for (var i = 0; i < controlsLen; i++) {
-			var c = controls[i];
-			var dx = p[0] - c[0][0];
-			var dy = p[1] - c[0][1];
-			if (dx >= 0 && dx < c[0][2] && dy >= 0 && dy < c[0][3]){
-				c[1](type, p[0], p[1]);
-			}
-		}
-	}
-	
-	// processes 'onmousedown' events
-	function onMouseDown(e) {
-		dispatchEvent(e, 'down');
-	}
-	
-	// processes 'onmouseup' events
-	function onMouseUp(e) {
-		dispatchEvent(e, 'up');
-	}
-	
-	// processes 'onmousemove' events
-	function onMouseMove(e) {
-		dispatchEvent(e, 'move');
-	}
-	
-	//
-	// initializes the closure vars & returns the step function
-	//
-	
-	init();
-	return function() {		
-        //update();
-		draw();
-	}
-})();
-
-// starts the simulation run
-setInterval(step, 1000);
-</script>
+</head>
+<body onload="webGLStart();">
+  <canvas id="display-canvas" style="border: none;" width="512" height="512"></canvas>
+</body>
 </html>
