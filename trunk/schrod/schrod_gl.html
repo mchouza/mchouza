@@ -44,7 +44,7 @@ precision highp int;
 
 varying vec2 vTextureCoord;
 
-uniform highp sampler2D uSampler[2];
+uniform highp sampler2D uSampler0, uSampler1;
 uniform int uTexSize;
 
 void main(void)
@@ -60,10 +60,10 @@ void main(void)
     } else if (dist2sq < 0.1 * 0.1) {
         gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
     } else {
-		vec4 wc = texture2D(uSampler[0], vec2(vTextureCoord.s - delta, vTextureCoord.t));
-		vec4 ec = texture2D(uSampler[0], vec2(vTextureCoord.s + delta, vTextureCoord.t));
-		vec4 sc = texture2D(uSampler[0], vec2(vTextureCoord.s, vTextureCoord.t - delta));
-		vec4 nc = texture2D(uSampler[0], vec2(vTextureCoord.s, vTextureCoord.t + delta));
+		vec4 wc = texture2D(uSampler0, vec2(vTextureCoord.s - delta, vTextureCoord.t));
+		vec4 ec = texture2D(uSampler0, vec2(vTextureCoord.s + delta, vTextureCoord.t));
+		vec4 sc = texture2D(uSampler0, vec2(vTextureCoord.s, vTextureCoord.t - delta));
+		vec4 nc = texture2D(uSampler0, vec2(vTextureCoord.s, vTextureCoord.t + delta));
         float val = (wc.r + ec.r + nc.r + sc.r) / 4.0 +
 			(wc.g + ec.g + nc.g + sc.g) / (4.0 * 255.0);
 		float hi = val - mod(val, 1.0 / 255.0);
@@ -79,7 +79,7 @@ precision highp int;
 
 varying vec2 vTextureCoord;
 
-uniform highp sampler2D uSampler[2];
+uniform highp sampler2D uSampler0, uSampler1;
 uniform int uTexSize;
 
 void main(void)
@@ -93,13 +93,13 @@ precision highp int;
 
 varying vec2 vTextureCoord;
 
-uniform highp sampler2D uSampler[2];
+uniform highp sampler2D uSampler0, uSampler1;
 uniform int uTexSize;
 
 
 void main(void)
 {
-	vec4 src = texture2D(uSampler[0], vec2(vTextureCoord.s, vTextureCoord.t));
+	vec4 src = texture2D(uSampler0, vec2(vTextureCoord.s, vTextureCoord.t));
 	float re = src.r;
     float im = src.b;
 	gl_FragColor = vec4(re, im, 0.0, 1.0);
@@ -176,7 +176,8 @@ function createProgram(progID) {
     gl.enableVertexAttribArray(prog.vertexPositionAttribute);
     prog.textureCoordAttribute = gl.getAttribLocation(prog, "aTextureCoord");
     gl.enableVertexAttribArray(prog.textureCoordAttribute);
-    prog.samplerUniform = gl.getUniformLocation(prog, "uSampler");
+    prog.samplerUniform0 = gl.getUniformLocation(prog, "uSampler0");
+	prog.samplerUniform1 = gl.getUniformLocation(prog, "uSampler1");
     prog.texSizeUniform = gl.getUniformLocation(prog, "uTexSize");
     
     return prog;
@@ -242,13 +243,14 @@ function doRenderOp(progID, dstTexName, srcTexName) {
     if (!srcTexName.pop) {
         srcTexName = [srcTexName];
     }
-    var samplerUniforms = [];
-    for (var i = 0; i < srcTexName.length; i++) {
-        gl.activeTexture(gl.TEXTURE0 + i);
-        gl.bindTexture(gl.TEXTURE_2D, texs[srcTexName[i]]);
-        samplerUniforms.push(i);
-    }
-    gl.uniform1iv(prog.samplerUniform, samplerUniforms);
+	gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texs[srcTexName[0]]);
+    gl.uniform1i(prog.samplerUniform0, 0);
+	if (srcTexName.length > 1) {
+		gl.activeTexture(gl.TEXTURE1);
+		gl.bindTexture(gl.TEXTURE_2D, texs[srcTexName[1]]);
+		gl.uniform1i(prog.samplerUniform1, 1);
+	}
     
     if (dstTexName) {
         gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
@@ -308,7 +310,7 @@ function updateState() {
 }
 
 function drawScene() {
-    doRenderOp('vis', null, ['psi', 'psiNew']);
+    doRenderOp('vis', null, 'psi');
 }
 
 function step() {
