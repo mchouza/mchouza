@@ -96,7 +96,7 @@ var PROGRAMS = {
     'laplace': ['shader-vs', 'shader-fs-laplace'],
     'straight': ['shader-vs', 'shader-fs-straight']
 };
-var TEXTURES = ['psi', 'psiNew'];
+var TEXTURES = ['psi', 'psiNew', 'k1', 'k2', 'k3', 'k4', 'k2Src', 'k3Src', 'k4Src', 'psiDot'];
 var BUFFERS = {
     'quadVB': {
         'type': 'v',
@@ -207,6 +207,37 @@ function createBuffer(bd) {
     return buffer;
 }
 
+function doDrawOp(progID, dstTexName, srcTexName) {
+    var prog = progs[progID];
+
+    gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+    
+    gl.useProgram(prog);
+    
+    gl.uniform1i(prog.texSizeUniform, N);
+    
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffers.quadVB);
+    gl.vertexAttribPointer(prog.vertexPositionAttribute, buffers.quadVB.itemSize, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffers.quadTB);
+    gl.vertexAttribPointer(prog.textureCoordAttribute, buffers.quadTB.itemSize, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers.quadIB);
+    
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texs[srcTexName]);
+    gl.uniform1i(prog.samplerUniform, 0);
+    
+    if (dstTexName) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texs[dstTexName], 0);
+    } else {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+    
+    gl.drawElements(gl.TRIANGLES, buffers.quadIB.numItems, gl.UNSIGNED_SHORT, 0);
+}
+
 var gl;
 function initGL(canvas) {
     gl = canvas.getContext("experimental-webgl");
@@ -237,28 +268,17 @@ function initBuffers() {
     }
 }
 
+function getK(kTexName, srcTexName) {
+}
+
+function getPsiDot(psiDotTexName, k1Texname, k2TexName, k3TexName, k4TexName) {
+}
+
+function eulerStep(psiNewTexName, psiTexName, psiDotTexName) {
+}
+
 function updateState() {
-    gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
-    gl.useProgram(progs.laplace);
-    gl.uniform1i(progs.laplace.texSizeUniform, N);
-    
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffers.quadVB);
-    gl.vertexAttribPointer(progs.laplace.vertexPositionAttribute, buffers.quadVB.itemSize, gl.FLOAT, false, 0, 0);
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffers.quadTB);
-    gl.vertexAttribPointer(progs.laplace.textureCoordAttribute, buffers.quadTB.itemSize, gl.FLOAT, false, 0, 0);
-
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers.quadIB);
-    
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, texs.psi);
-    gl.uniform1i(progs.laplace.samplerUniform, 0);
-    
-    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texs.psiNew, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.drawElements(gl.TRIANGLES, buffers.quadIB.numItems, gl.UNSIGNED_SHORT, 0);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    doDrawOp('laplace', 'psiNew', 'psi');
     
     var t = texs.psi;
     texs.psi = texs.psiNew;
@@ -266,11 +286,7 @@ function updateState() {
 }
 
 function drawScene() {
-    gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
-    gl.useProgram(progs.straight);
-    gl.uniform1i(progs.straight.texSizeUniform, N);
-    
-    gl.drawElements(gl.TRIANGLES, buffers.quadIB.numItems, gl.UNSIGNED_SHORT, 0);
+    doDrawOp('straight', null, 'psi');
 }
 
 function step() {
