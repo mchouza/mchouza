@@ -26,13 +26,25 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 -->
 <title>WebGL Schr&ouml;dinger Simulator</title>
+<script id="shader-vs" type="x-shader/x-vertex">
+attribute vec3 aVertexPosition;
+attribute vec2 aTextureCoord;
+
+varying vec2 vTextureCoord;
+
+void main(void)
+{
+    gl_Position = vec4(aVertexPosition, 1.0);
+    vTextureCoord = aTextureCoord;
+}
+</script>
 <script id="shader-fs-laplace" type="x-shader/x-fragment">
 precision highp float;
 precision highp int;
 
 varying vec2 vTextureCoord;
 
-uniform highp sampler2D uSampler;
+uniform highp sampler2D uSampler[2];
 uniform int uTexSize;
 
 void main(void)
@@ -48,10 +60,10 @@ void main(void)
     } else if (dist2sq < 0.1 * 0.1) {
         gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
     } else {
-		vec4 wc = texture2D(uSampler, vec2(vTextureCoord.s - delta, vTextureCoord.t));
-		vec4 ec = texture2D(uSampler, vec2(vTextureCoord.s + delta, vTextureCoord.t));
-		vec4 sc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t - delta));
-		vec4 nc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t + delta));
+		vec4 wc = texture2D(uSampler[0], vec2(vTextureCoord.s - delta, vTextureCoord.t));
+		vec4 ec = texture2D(uSampler[0], vec2(vTextureCoord.s + delta, vTextureCoord.t));
+		vec4 sc = texture2D(uSampler[0], vec2(vTextureCoord.s, vTextureCoord.t - delta));
+		vec4 nc = texture2D(uSampler[0], vec2(vTextureCoord.s, vTextureCoord.t + delta));
         float val = (wc.r + ec.r + nc.r + sc.r) / 4.0 +
 			(wc.g + ec.g + nc.g + sc.g) / (4.0 * 255.0);
 		float hi = val - mod(val, 1.0 / 255.0);
@@ -61,40 +73,43 @@ void main(void)
     }
 }
 </script>
-<script id="shader-fs-straight" type="x-shader/x-fragment">
+<script id="shader-fs-euler-step" type="x-shader/x-fragment">
 precision highp float;
 precision highp int;
 
 varying vec2 vTextureCoord;
 
-uniform highp sampler2D uSampler;
+uniform highp sampler2D uSampler[2];
+uniform int uTexSize;
+
+void main(void)
+{
+    gl_FragColor = vec4(1.0, 1.0, 0.0, 1.0);
+}
+</script>
+<script id="shader-fs-vis" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+varying vec2 vTextureCoord;
+
+uniform highp sampler2D uSampler[2];
 uniform int uTexSize;
 
 
 void main(void)
 {
-	vec4 src = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
-	float brightness = src.r;
-	gl_FragColor = vec4(brightness, brightness, brightness, 1.0);
-}
-</script>
-<script id="shader-vs" type="x-shader/x-vertex">
-attribute vec3 aVertexPosition;
-attribute vec2 aTextureCoord;
-
-varying vec2 vTextureCoord;
-
-void main(void)
-{
-    gl_Position = vec4(aVertexPosition, 1.0);
-    vTextureCoord = aTextureCoord;
+	vec4 src = texture2D(uSampler[0], vec2(vTextureCoord.s, vTextureCoord.t));
+	float re = src.r;
+    float im = src.b;
+	gl_FragColor = vec4(re, im, 0.0, 1.0);
 }
 </script>
 <script type="text/javascript">
 var N = 64;
 var PROGRAMS = {
     'laplace': ['shader-vs', 'shader-fs-laplace'],
-    'straight': ['shader-vs', 'shader-fs-straight']
+    'vis': ['shader-vs', 'shader-fs-vis']
 };
 var TEXTURES = ['psi', 'psiNew', 'k1', 'k2', 'k3', 'k4', 'k2Src', 'k3Src', 'k4Src', 'psiDot'];
 var BUFFERS = {
@@ -207,7 +222,7 @@ function createBuffer(bd) {
     return buffer;
 }
 
-function doDrawOp(progID, dstTexName, srcTexName) {
+function doRenderOp(progID, dstTexName, srcTexName) {
     var prog = progs[progID];
 
     gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
@@ -224,9 +239,16 @@ function doDrawOp(progID, dstTexName, srcTexName) {
 
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers.quadIB);
     
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, texs[srcTexName]);
-    gl.uniform1i(prog.samplerUniform, 0);
+    if (!srcTexName.pop) {
+        srcTexName = [srcTexName];
+    }
+    var samplerUniforms = [];
+    for (var i = 0; i < srcTexName.length; i++) {
+        gl.activeTexture(gl.TEXTURE0 + i);
+        gl.bindTexture(gl.TEXTURE_2D, texs[srcTexName[i]]);
+        samplerUniforms.push(i);
+    }
+    gl.uniform1iv(prog.samplerUniform, samplerUniforms);
     
     if (dstTexName) {
         gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
@@ -274,11 +296,11 @@ function getK(kTexName, srcTexName) {
 function getPsiDot(psiDotTexName, k1Texname, k2TexName, k3TexName, k4TexName) {
 }
 
-function eulerStep(psiNewTexName, psiTexName, psiDotTexName) {
+function eulerStep(psiNewTexName, psiTexName, psiDotTexName, halfStep) {
 }
 
 function updateState() {
-    doDrawOp('laplace', 'psiNew', 'psi');
+    doRenderOp('laplace', 'psiNew', 'psi');
     
     var t = texs.psi;
     texs.psi = texs.psiNew;
@@ -286,7 +308,7 @@ function updateState() {
 }
 
 function drawScene() {
-    doDrawOp('straight', null, 'psi');
+    doRenderOp('vis', null, ['psi', 'psiNew']);
 }
 
 function step() {
