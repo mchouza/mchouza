@@ -56,6 +56,26 @@ void main(void)
     gl_FragColor = vec4(re_hi, re_lo, im_hi, im_lo);
 }
 </script>
+<script id="shader-fs-init-v" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+varying vec2 vTextureCoord;
+
+void main(void)
+{
+    float v = 0.0;
+	if (vTextureCoord.s >= 0.4 && vTextureCoord.s <= 0.6 &&
+	    vTextureCoord.t >= 0.4 && vTextureCoord.t <= 0.6)
+	{
+		v = 0.5;
+	}
+	float vLo = v - mod(v, 1.0 / 255.0);
+	float vHi = v - vLo;
+	vLo *= 255.0;
+    gl_FragColor = vec4(vHi, vLo, 0.0, 0.0);
+}
+</script>
 <script id="shader-fs-get-k" type="x-shader/x-fragment">
 // i hbar d/dt psi = -hbar^2/(2m) lap psi + v psi
 // hbar = m = 1
@@ -88,16 +108,18 @@ void main(void)
     vec4 psiEColor = texture2D(uSampler0, vec2(vTextureCoord.s + delta, vTextureCoord.t));
     vec4 psiSColor = texture2D(uSampler0, vec2(vTextureCoord.s, vTextureCoord.t - delta));
     vec4 psiNColor = texture2D(uSampler0, vec2(vTextureCoord.s, vTextureCoord.t + delta));
+	vec4 vColor = texture2D(uSampler1, vTextureCoord);
     
     vec2 psi = vec2(2.0 * (psiColor.r + psiColor.g / 255.0 - 0.5), 2.0 * (psiColor.b + psiColor.a / 255.0 - 0.5));
     vec2 psiW = vec2(2.0 * (psiWColor.r + psiWColor.g / 255.0 - 0.5), 2.0 * (psiWColor.b + psiWColor.a / 255.0 - 0.5));
     vec2 psiE = vec2(2.0 * (psiEColor.r + psiEColor.g / 255.0 - 0.5), 2.0 * (psiEColor.b + psiEColor.a / 255.0 - 0.5));
     vec2 psiS = vec2(2.0 * (psiSColor.r + psiSColor.g / 255.0 - 0.5), 2.0 * (psiSColor.b + psiSColor.a / 255.0 - 0.5));
     vec2 psiN = vec2(2.0 * (psiNColor.r + psiNColor.g / 255.0 - 0.5), 2.0 * (psiNColor.b + psiNColor.a / 255.0 - 0.5));
+	float v = vColor.r + vColor.g / 255.0;
     
     vec2 lap = 4.0 * psi - psiW - psiE - psiS - psiN;
     
-    vec2 psiDot = vec2(-0.5 * lap.y, 0.5 * lap.x) / 2.0 + 0.5;
+    vec2 psiDot = vec2(-0.5 * lap.y + v * psi.y, 0.5 * lap.x - v * psi.x) / 2.0 + 0.5;
     vec2 psiDotLo = mod(psiDot, 1.0 / 255.0);
     vec2 psiDotHi = psiDot - psiDotLo;
     psiDotLo *= 255.0;
@@ -121,22 +143,17 @@ void main(void)
     vec4 k3Color = texture2D(uSampler2, vTextureCoord);
     vec4 k4Color = texture2D(uSampler3, vTextureCoord);
     
-    vec2 k1 = vec2(k1Color.r + k1Color.g / 255.0, k1Color.b + k1Color.a / 255.0);
-    vec2 k2 = vec2(k2Color.r + k2Color.g / 255.0, k2Color.b + k2Color.a / 255.0);
-    vec2 k3 = vec2(k3Color.r + k3Color.g / 255.0, k3Color.b + k3Color.a / 255.0);
-    vec2 k4 = vec2(k4Color.r + k4Color.g / 255.0, k4Color.b + k4Color.a / 255.0);
-    k1 = 2.0 * k1 - 1.0;
-    k2 = 2.0 * k2 - 1.0;
-    k3 = 2.0 * k3 - 1.0;
-    k4 = 2.0 * k4 - 1.0;
+	vec2 k1 = 2.0 * (k1Color.rb + k1Color.ga / 255.0) - 1.0;
+	vec2 k2 = 2.0 * (k2Color.rb + k2Color.ga / 255.0) - 1.0;
+	vec2 k3 = 2.0 * (k3Color.rb + k3Color.ga / 255.0) - 1.0;
+	vec2 k4 = 2.0 * (k4Color.rb + k4Color.ga / 255.0) - 1.0;
     
-    vec2 psiDot = (k1 + 2.0 * (k2 + k3) + k4) / 6.0;
+    vec2 psiDot = ((k1 + 2.0 * (k2 + k3) + k4) / 6.0) / 2.0 + 0.5;
     vec2 psiDotLo = mod(psiDot, 1.0 / 255.0);
     vec2 psiDotHi = psiDot - psiDotLo;
     psiDotLo *= 255.0;
     
-    //gl_FragColor = vec4(psiDotHi.x, psiDotLo.x, psiDotHi.y, psiDotLo.y);
-    gl_FragColor = k4Color;
+    gl_FragColor = vec4(psiDotHi.x, psiDotLo.x, psiDotHi.y, psiDotLo.y);
 }
 </script>
 <script id="shader-fs-half-euler-step" type="x-shader/x-fragment">
@@ -152,21 +169,18 @@ void main(void)
 {
     vec4 psiColor = texture2D(uSampler0, vTextureCoord);
     vec4 psiDotColor = texture2D(uSampler1, vTextureCoord);
-    float psiRe = 2.0 * (psiColor.r + psiColor.g / 255.0 - 0.5);
-    float psiIm = 2.0 * (psiColor.b + psiColor.a / 255.0 - 0.5);
-    float psiDotRe = 2.0 * (psiDotColor.r + psiDotColor.g / 255.0 - 0.5);
-    float psiDotIm = 2.0 * (psiDotColor.b + psiDotColor.a / 255.0 - 0.5);
-    psiRe += psiDotRe * 0.05;
-    psiIm += psiDotIm * 0.05;
-    psiRe = psiRe / 2.0 + 0.5;
-    psiIm = psiIm / 2.0 + 0.5;
-    float psiReLo = mod(psiRe, 1.0 / 255.0);
-    float psiReHi = psiRe - psiReLo;
-    psiReLo *= 255.0;
-    float psiImLo = mod(psiIm, 1.0 / 255.0);
-    float psiImHi = psiIm - psiImLo;
-    psiImLo *= 255.0;
-    gl_FragColor = vec4(psiReHi, psiReLo, psiImHi, psiImLo);
+	
+	vec2 psi = 2.0 * (psiColor.rb + psiColor.ga / 255.0) - 1.0;
+	vec2 psiDot = 2.0 * (psiDotColor.rb + psiDotColor.ga / 255.0) - 1.0;
+	
+	psi += psiDot * 0.1;
+	
+	psi = psi / 2.0 + 0.5;
+	vec2 psiLo = mod(psi, 1.0 / 255.0);
+	vec2 psiHi = psi - psiLo;
+	psiLo *= 255.0;
+	
+	gl_FragColor = vec4(psiHi.x, psiLo.x, psiHi.y, psiLo.y);
 }
 </script>
 <script id="shader-fs-euler-step" type="x-shader/x-fragment">
@@ -182,21 +196,18 @@ void main(void)
 {
     vec4 psiColor = texture2D(uSampler0, vTextureCoord);
     vec4 psiDotColor = texture2D(uSampler1, vTextureCoord);
-    float psiRe = 2.0 * (psiColor.r + psiColor.g / 255.0 - 0.5);
-    float psiIm = 2.0 * (psiColor.b + psiColor.a / 255.0 - 0.5);
-    float psiDotRe = 2.0 * (psiDotColor.r + psiDotColor.g / 255.0 - 0.5);
-    float psiDotIm = 2.0 * (psiDotColor.b + psiDotColor.a / 255.0 - 0.5);
-    psiRe += psiDotRe * 0.1;
-    psiIm += psiDotIm * 0.1;
-    psiRe = psiRe / 2.0 + 0.5;
-    psiIm = psiIm / 2.0 + 0.5;
-    float psiReLo = mod(psiRe, 1.0 / 255.0);
-    float psiReHi = psiRe - psiReLo;
-    psiReLo *= 255.0;
-    float psiImLo = mod(psiIm, 1.0 / 255.0);
-    float psiImHi = psiIm - psiImLo;
-    psiImLo *= 255.0;
-    gl_FragColor = vec4(psiReHi, psiReLo, psiImHi, psiImLo);
+	
+	vec2 psi = 2.0 * (psiColor.rb + psiColor.ga / 255.0) - 1.0;
+	vec2 psiDot = 2.0 * (psiDotColor.rb + psiDotColor.ga / 255.0) - 1.0;
+	
+	psi += psiDot * 0.2;
+	
+	psi = psi / 2.0 + 0.5;
+	vec2 psiLo = mod(psi, 1.0 / 255.0);
+	vec2 psiHi = psi - psiLo;
+	psiLo *= 255.0;
+	
+	gl_FragColor = vec4(psiHi.x, psiLo.x, psiHi.y, psiLo.y);
 }
 </script>
 <script id="shader-fs-vis" type="x-shader/x-fragment">
@@ -211,18 +222,27 @@ uniform int uTexSize;
 
 void main(void)
 {
-	vec4 src = texture2D(uSampler0, vec2(vTextureCoord.s, vTextureCoord.t));
-	float re = abs(2.0 * (src.r - 0.5));
-    float im = abs(2.0 * (src.b - 0.5));
-	gl_FragColor = vec4(re, im, 0.0, 1.0);
+	vec4 psiColor = texture2D(uSampler0, vTextureCoord);
+	vec4 vColor = texture2D(uSampler1, vTextureCoord);
+	
+	vec2 psi = abs(2.0 * (psiColor.rb - 0.5));
+	float v = vColor.r;
+	
+	gl_FragColor = vec4(psi.x, psi.y, v, 1.0);
 }
 </script>
 <script type="text/javascript">
-var N = 512;
+var N = 256;
 var PROGRAMS = {
     'init': {
         'attr': ['aTextureCoord', 'aVertexPosition'],
         'fs': 'shader-fs-init',
+        'un': [],
+        'vs': 'shader-vs'
+    },
+    'initV': {
+        'attr': ['aTextureCoord', 'aVertexPosition'],
+        'fs': 'shader-fs-init-v',
         'un': [],
         'vs': 'shader-vs'
     },
@@ -257,7 +277,7 @@ var PROGRAMS = {
         'vs': 'shader-vs'
     }
 };
-var TEXTURES = ['psi', 'psiNew', 'k1', 'k2', 'k3', 'k4', 'k2Src', 'k3Src', 'k4Src', 'psiDot'];
+var TEXTURES = ['psi', 'psiNew', 'k1', 'k2', 'k3', 'k4', 'k2Src', 'k3Src', 'k4Src', 'psiDot', 'v'];
 var BUFFERS = {
     'quadVB': {
         'type': 'v',
@@ -440,9 +460,9 @@ function initBuffers() {
     }
 }
 
-function getK(kTexName, srcTexName) {
+function getK(kTexName, srcTexName, vTexName) {
     // FIXME: ADD V
-    doRenderOp('getK', kTexName, [srcTexName]);
+    doRenderOp('getK', kTexName, [srcTexName, vTexName]);
 }
 
 function getPsiDot(psiDotTexName, k1Texname, k2TexName, k3TexName, k4TexName) {
@@ -459,13 +479,13 @@ function eulerStep(psiNewTexName, psiTexName, psiDotTexName, halfStep) {
 
 function updateState() {
     // RK4
-    getK('k1', 'psi');
+    getK('k1', 'psi', 'v');
     eulerStep('k2Src', 'psi', 'k1', true);
-    getK('k2', 'k2Src');
+    getK('k2', 'k2Src', 'v');
     eulerStep('k3Src', 'psi', 'k2', true);
-    getK('k3', 'k3Src');
+    getK('k3', 'k3Src', 'v');
     eulerStep('k4Src', 'psi', 'k3', false);
-    getK('k4', 'k4Src');
+    getK('k4', 'k4Src', 'v');
     getPsiDot('psiDot', 'k1', 'k2', 'k3', 'k4');
     eulerStep('psiNew', 'psi', 'psiDot', false);
     
@@ -475,7 +495,7 @@ function updateState() {
 }
 
 function drawScene() {
-    doRenderOp('vis', null, 'psi');
+    doRenderOp('vis', null, ['psi', 'v']);
 }
 
 function step() {
@@ -490,6 +510,7 @@ function webGLStart() {
     initBuffers();
     initTextureFramebuffer();
     doRenderOp('init', 'psi', []);
+	doRenderOp('initV', 'v', []);
 
     setInterval(step, 0);
 }
