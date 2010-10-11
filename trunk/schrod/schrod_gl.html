@@ -46,14 +46,17 @@ varying vec2 vTextureCoord;
 
 void main(void)
 {
-    float t = vTextureCoord.t;
-    float re = 0.5 * sin(t * 192.0) * exp(-pow(50.0 * (t - 0.3), 2.0)) + 0.5;
-    float im = 0.5 * cos(t * 192.0) * exp(-pow(50.0 * (t - 0.3), 2.0)) + 0.5;
-    float re_hi = re - mod(re, 1.0 / 255.0);
-    float re_lo = (re - re_hi) * 255.0;
-    float im_hi = im - mod(im, 1.0 / 255.0);
-    float im_lo = (im - im_hi) * 255.0;
-    gl_FragColor = vec4(re_hi, re_lo, im_hi, im_lo);
+    vec2 delta = vTextureCoord - vec2(0.5, 0.25);
+    
+    vec2 psi = exp(-dot(delta, delta) / 0.01) * vec2(sin(delta.y * 192.0), cos(delta.y * 192.0));
+    
+    psi = psi / 2.0 + 0.5;
+    
+    vec2 psiLo = mod(psi, 1.0 / 255.0);
+    vec2 psiHi = psi - psiLo;
+    psiLo *= 255.0;
+
+    gl_FragColor = vec4(psiHi.x, psiLo.x, psiHi.y, psiLo.y);
 }
 </script>
 <script id="shader-fs-init-v" type="x-shader/x-fragment">
@@ -65,11 +68,12 @@ varying vec2 vTextureCoord;
 void main(void)
 {
     float v = 0.0;
-	if (vTextureCoord.s >= 0.4 && vTextureCoord.s <= 0.6 &&
-	    vTextureCoord.t >= 0.4 && vTextureCoord.t <= 0.6)
-	{
-		v = 0.5;
-	}
+	vec2 delta = vTextureCoord - vec2(0.5, 0.5);
+    
+    if (dot(delta, delta) < 0.01) {
+        v = 0.5;
+    }
+    
 	float vLo = mod(v, 1.0 / 255.0);
 	float vHi = v - vLo;
 	vLo *= 255.0;
@@ -110,12 +114,14 @@ void main(void)
     vec4 psiNColor = texture2D(uSampler0, vec2(vTextureCoord.s, vTextureCoord.t + delta));
 	vec4 vColor = texture2D(uSampler1, vTextureCoord);
     
-    vec2 psi = vec2(2.0 * (psiColor.r + psiColor.g / 255.0 - 0.5), 2.0 * (psiColor.b + psiColor.a / 255.0 - 0.5));
-    vec2 psiW = vec2(2.0 * (psiWColor.r + psiWColor.g / 255.0 - 0.5), 2.0 * (psiWColor.b + psiWColor.a / 255.0 - 0.5));
-    vec2 psiE = vec2(2.0 * (psiEColor.r + psiEColor.g / 255.0 - 0.5), 2.0 * (psiEColor.b + psiEColor.a / 255.0 - 0.5));
-    vec2 psiS = vec2(2.0 * (psiSColor.r + psiSColor.g / 255.0 - 0.5), 2.0 * (psiSColor.b + psiSColor.a / 255.0 - 0.5));
-    vec2 psiN = vec2(2.0 * (psiNColor.r + psiNColor.g / 255.0 - 0.5), 2.0 * (psiNColor.b + psiNColor.a / 255.0 - 0.5));
+    vec2 psi = 2.0 * (psiColor.rb + psiColor.ga / 255.0) - 1.0;
+    vec2 psiW = 2.0 * (psiWColor.rb + psiWColor.ga / 255.0) - 1.0;
+    vec2 psiE = 2.0 * (psiEColor.rb + psiEColor.ga / 255.0) - 1.0;
+    vec2 psiS = 2.0 * (psiSColor.rb + psiSColor.ga / 255.0) - 1.0;
+    vec2 psiN = 2.0 * (psiNColor.rb + psiNColor.ga / 255.0) - 1.0;
 	float v = vColor.r + vColor.g / 255.0;
+    
+    v = -v;
     
     vec2 lap = 4.0 * psi - psiW - psiE - psiS - psiN;
     
@@ -210,6 +216,90 @@ void main(void)
 	gl_FragColor = vec4(psiHi.x, psiLo.x, psiHi.y, psiLo.y);
 }
 </script>
+<script id="shader-fs-get-bounds" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+varying vec2 vTextureCoord;
+
+uniform highp sampler2D uSampler0, uSampler1;
+uniform int uTexSize;
+
+void main(void)
+{
+    vec4 psiColor = texture2D(uSampler0, vTextureCoord);
+    
+	vec2 psi = 2.0 * (psiColor.rb + psiColor.ga / 255.0) - 1.0;
+    
+	float psiMod = sqrt(dot(psi, psi));
+	
+	float psiModLo = mod(psiMod, 1.0 / 255.0);
+    float psiModHi = psiMod - psiModLo;
+    psiModLo *= 255.0;
+	
+	gl_FragColor = vec4(psiModHi, psiModLo, 0.0, 0.0);
+}
+</script>
+<script id="shader-fs-red-bounds" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+varying vec2 vTextureCoord;
+
+uniform highp sampler2D uSampler0;
+uniform int uTexSize;
+
+void main(void)
+{
+    float delta = 0.5 / float(uTexSize);
+
+    vec4 boundsNWColor = texture2D(uSampler0, vec2(vTextureCoord.s - delta, vTextureCoord.t + delta));
+    vec4 boundsNEColor = texture2D(uSampler0, vec2(vTextureCoord.s + delta, vTextureCoord.t + delta));
+    vec4 boundsSWColor = texture2D(uSampler0, vec2(vTextureCoord.s - delta, vTextureCoord.t - delta));
+    vec4 boundsSEColor = texture2D(uSampler0, vec2(vTextureCoord.s + delta, vTextureCoord.t - delta));
+	
+	vec2 boundsNW = boundsNWColor.rb + boundsNWColor.ga / 255.0;
+    vec2 boundsNE = boundsNEColor.rb + boundsNEColor.ga / 255.0;
+    vec2 boundsSW = boundsSWColor.rb + boundsSWColor.ga / 255.0;
+    vec2 boundsSE = boundsSEColor.rb + boundsSEColor.ga / 255.0;
+    
+    vec2 bounds = vec2(max(max(boundsNW.x, boundsNE.x), max(boundsSW.x, boundsSE.x)),
+                       max(max(boundsNW.y, boundsNE.y), max(boundsSW.y, boundsSE.y)));
+    
+    vec2 boundsLo = mod(bounds, 1.0 / 255.0);
+    vec2 boundsHi = bounds - boundsLo;
+    boundsLo *= 255.0;
+	
+	gl_FragColor = vec4(boundsHi.x, boundsLo.x, boundsHi.y, boundsLo.y);
+}
+</script>
+<script id="shader-fs-scale" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+varying vec2 vTextureCoord;
+
+uniform highp sampler2D uSampler0, uSampler1;
+uniform int uTexSize;
+
+
+void main(void)
+{
+	vec4 psiColor = texture2D(uSampler0, vTextureCoord);
+	vec4 maxPsiModColor = texture2D(uSampler1, vec2(0.5, 0.5));
+	
+	vec2 psi = 2.0 * (psiColor.rb + psiColor.ga / 255.0) - 1.0;
+	float maxPsiMod = maxPsiModColor.r + maxPsiModColor.g / 255.0;
+    
+    psi = (psi / maxPsiMod) / 2.0 + 0.5;
+    
+	vec2 psiLo = mod(psi, 1.0 / 255.0);
+	vec2 psiHi = psi - psiLo;
+	psiLo *= 255.0;
+	
+	gl_FragColor = vec4(psiHi.x, psiLo.x, psiHi.y, psiLo.y);
+}
+</script>
 <script id="shader-fs-vis" type="x-shader/x-fragment">
 precision highp float;
 precision highp int;
@@ -267,6 +357,24 @@ var PROGRAMS = {
     'halfEulerStep': {
         'attr': ['aTextureCoord', 'aVertexPosition'],
         'fs': 'shader-fs-euler-step',
+        'un': ['uSampler0', 'uSampler1', 'uTexSize'],
+        'vs': 'shader-vs'
+    },
+    'getBounds': {
+        'attr': ['aTextureCoord', 'aVertexPosition'],
+        'fs': 'shader-fs-get-bounds',
+        'un': ['uSampler0', 'uSampler1', 'uTexSize'],
+        'vs': 'shader-vs'
+    },
+    'redBounds': {
+        'attr': ['aTextureCoord', 'aVertexPosition'],
+        'fs': 'shader-fs-red-bounds',
+        'un': ['uSampler0', 'uTexSize'],
+        'vs': 'shader-vs'
+    },
+    'scale': {
+        'attr': ['aTextureCoord', 'aVertexPosition'],
+        'fs': 'shader-fs-scale',
         'un': ['uSampler0', 'uSampler1', 'uTexSize'],
         'vs': 'shader-vs'
     },
@@ -354,14 +462,15 @@ function createProgram(progDesc) {
     return prog;
 }
 
-function createTexture() {
+function createTexture(n) {
     var tex = gl.createTexture();
+    tex.n = n;
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT );
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT );
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, N, N, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, n, n, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     gl.bindTexture(gl.TEXTURE_2D, null);
     return tex;
 }
@@ -394,14 +503,14 @@ function createBuffer(bd) {
     return buffer;
 }
 
-function doRenderOp(progID, dstTexName, srcTexName) {
+function doRenderOp(progID, dstTexName, srcTexName, n) {
     var prog = progs[progID];
 
     gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
     
     gl.useProgram(prog);
     
-    gl.uniform1i(prog.un.uTexSize, N);
+    gl.uniform1i(prog.un.uTexSize, n);
     
     gl.bindBuffer(gl.ARRAY_BUFFER, buffers.quadVB);
     gl.vertexAttribPointer(prog.attr.aVertexPosition, buffers.quadVB.itemSize, gl.FLOAT, false, 0, 0);
@@ -449,7 +558,10 @@ var texs = {};
 function initTextureFramebuffer() {
     framebuffer = gl.createFramebuffer();
     for (var i = 0; i < TEXTURES.length; i++) {
-        texs[TEXTURES[i]] = createTexture();
+        texs[TEXTURES[i]] = createTexture(N);
+    }
+    for (var n = N; n >= 1; n /= 2) {
+        texs['red-' + n] = createTexture(n);
     }
 }
 
@@ -461,18 +573,37 @@ function initBuffers() {
 }
 
 function getK(kTexName, srcTexName, vTexName) {
-    doRenderOp('getK', kTexName, [srcTexName, vTexName]);
+    doRenderOp('getK', kTexName, [srcTexName, vTexName], N);
 }
 
 function getPsiDot(psiDotTexName, k1Texname, k2TexName, k3TexName, k4TexName) {
-    doRenderOp('getPsiDot', psiDotTexName, [k1Texname, k2TexName, k3TexName, k4TexName]);
+    doRenderOp('getPsiDot', psiDotTexName, [k1Texname, k2TexName, k3TexName, k4TexName], N);
 }
 
 function eulerStep(psiNewTexName, psiTexName, psiDotTexName, halfStep) {
     if (halfStep) {
-        doRenderOp('halfEulerStep', psiNewTexName, [psiTexName, psiDotTexName]);
+        doRenderOp('halfEulerStep', psiNewTexName, [psiTexName, psiDotTexName], N);
     } else {
-        doRenderOp('eulerStep', psiNewTexName, [psiTexName, psiDotTexName]);
+        doRenderOp('eulerStep', psiNewTexName, [psiTexName, psiDotTexName], N);
+    }
+}
+
+var frameNum = 0;
+var frameNumStarted = new Date();
+function updateFPS() {
+    frameNum++;
+    var now = new Date();
+    if (now - frameNumStarted > 1000) {
+        document.getElementById('fps').innerText = (1000 / ((now - frameNumStarted) / frameNum)).toFixed(2);
+        frameNum = 0;
+        frameNumStarted = now;
+    }
+}
+
+function getBounds() {
+    doRenderOp('getBounds', 'red-' + N, ['psi', 'v'], N);
+    for (var n = N / 2; n >= 1; n /= 2) {
+        doRenderOp('redBounds', 'red-' + n, ['red-' + 2 * n], n);
     }
 }
 
@@ -487,18 +618,21 @@ function updateState() {
     getK('k4', 'k4Src', 'v');
     getPsiDot('psiDot', 'k1', 'k2', 'k3', 'k4');
     eulerStep('psiNew', 'psi', 'psiDot', false);
-    
-    var t = texs.psi;
-    texs.psi = texs.psiNew;
-    texs.psiNew = t;
+}
+
+function scaleState() {
+    doRenderOp('scale', 'psi', ['psiNew', 'red-1'], N);
 }
 
 function drawScene() {
-    doRenderOp('vis', null, ['psi', 'v']);
+    doRenderOp('vis', null, ['psi', 'v'], N);
 }
 
 function step() {
+    updateFPS();
+    getBounds();
     updateState();
+    scaleState();
     drawScene();
 }
 
@@ -508,8 +642,8 @@ function webGLStart() {
     initShaders();
     initBuffers();
     initTextureFramebuffer();
-    doRenderOp('init', 'psi', []);
-	doRenderOp('initV', 'v', []);
+    doRenderOp('init', 'psi', [], N);
+	doRenderOp('initV', 'v', [], N);
 
     setInterval(step, 0);
 }
@@ -517,5 +651,6 @@ function webGLStart() {
 </head>
 <body onload="webGLStart();">
   <canvas id="display-canvas" style="border: none;" width="512" height="512"></canvas>
+  <p><strong>FPS: </strong><span id="fps">N/A</span></p>
 </body>
 </html>
