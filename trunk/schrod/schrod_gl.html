@@ -67,11 +67,19 @@ varying vec2 vTextureCoord;
 
 void main(void)
 {
-    float v = 0.0;
-	vec2 delta = vTextureCoord - vec2(0.5, 0.5);
+	vec2 delta = vTextureCoord - vec2(0.45, 0.5);
+    vec2 delta2 = vTextureCoord - vec2(0.55, 0.5);
     
-    if (dot(delta, delta) < 0.01) {
+    /*
+    float v = 0.5 * exp(-dot(delta, delta) * 10000.0);
+    v += 0.5 * exp(-dot(delta2, delta2) * 10000.0);
+    */
+    float v = 0.0;
+    if (delta.y > 0.0 && delta.y < 0.02) {
         v = 0.5;
+    }
+    if (abs(delta.x) < 0.01 || abs(delta2.x) < 0.01) {
+        v = 0.0;
     }
     
 	float vLo = mod(v, 1.0 / 255.0);
@@ -119,9 +127,7 @@ void main(void)
     vec2 psiE = 2.0 * (psiEColor.rb + psiEColor.ga / 255.0) - 1.0;
     vec2 psiS = 2.0 * (psiSColor.rb + psiSColor.ga / 255.0) - 1.0;
     vec2 psiN = 2.0 * (psiNColor.rb + psiNColor.ga / 255.0) - 1.0;
-	float v = vColor.r + vColor.g / 255.0;
-    
-    v = -v;
+	float v = -(vColor.r + vColor.g / 255.0);
     
     vec2 lap = 4.0 * psi - psiW - psiE - psiS - psiN;
     
@@ -315,14 +321,28 @@ void main(void)
 	vec4 psiColor = texture2D(uSampler0, vTextureCoord);
 	vec4 vColor = texture2D(uSampler1, vTextureCoord);
 	
-	vec2 psi = abs(2.0 * (psiColor.rb - 0.5));
+	vec2 psi = 2.0 * (psiColor.rb - 0.5);
 	float v = vColor.r;
+    
+    float psiNorm = min(sqrt(dot(psi, psi)), 1.0);
+    float r = pow(max(dot(psi, vec2(1.0, 0.0)), 0.0), 0.3);
+    float g = pow(max(dot(psi, vec2(-0.5, 0.866)), 0.0), 0.3);
+    float b = pow(max(dot(psi, vec2(-0.5, -0.866)), 0.0), 0.3);
+    float mult = 0.0;
+    float maxRGB = max(max(r, g), b);
+    if (maxRGB != 0.0) {
+        mult = psiNorm / maxRGB;
+    }
+    r *= mult;
+    g *= mult;
+    b *= mult;
 	
-	gl_FragColor = vec4(psi.x, psi.y, v, 1.0);
+	gl_FragColor = vec4(r, g, b, 1.0);
 }
 </script>
 <script type="text/javascript">
 var N = 512;
+var LOG_STEPS_PER_FRAME = 3;
 var PROGRAMS = {
     'init': {
         'attr': ['aTextureCoord', 'aVertexPosition'],
@@ -630,9 +650,11 @@ function drawScene() {
 
 function step() {
     updateFPS();
-    getBounds();
-    updateState();
-    scaleState();
+    for (var i = 0; i < LOG_STEPS_PER_FRAME; i++) {
+        getBounds();
+        updateState();
+        scaleState();
+    }
     drawScene();
 }
 
