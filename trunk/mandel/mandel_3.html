@@ -1,9 +1,11 @@
 <html>
 <head>
-    <title>Mandelbrot Set (iteration count)</title>
+    <title>Mandelbrot Set (fractional iteration count)</title>
     <script>
 var N = 512;
 var RANGE = [-2, 2];
+var ESC_RADIUS = 20;
+var LOG2 = Math.log(2);
 var canvas = null;
 var ctx = null;
     
@@ -39,11 +41,14 @@ var step = (function() {
     
     function getColor(cpe, out) {
         if (out) {
+            /* fractional iterations calculation */
+            var zmod = Math.sqrt(cpe.z[0] * cpe.z[0] + cpe.z[1] * cpe.z[1]);
+            var iter = cpe.it + 1 - Math.log(Math.log(zmod)) / LOG2;
             /* 1 iter -> l = 0
                inf iters -> l = 255
                Let's use
                l = 255 - 255 / iters */
-            var l = 255 - 255 / cpe.it;
+            var l = 255 - 255 / iter;
             return [l, l, l];
         } else {
             return [0, 0, 0];
@@ -58,7 +63,7 @@ var step = (function() {
         idx1 = idx2 = 0;
         for (var i = 0; i < N * N; i++) {
             var cpe = complexPlane[idx2];
-            var out = abs(cpe.z) > 2;
+            var out = abs(cpe.z) > ESC_RADIUS;
             if (!out) {
                 cpe.z = f(cpe.z, cpe.c);
                 cpe.it++;
