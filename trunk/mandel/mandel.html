@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mandelbrot Set</title>
+    <script>
+/*
+Copyright (c) 2010 Mariano M. Chouza
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use,
+copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+*/
+    
+    function MandelbrotRenderer(canvasId, initialArea, drawMode) {
+        this.canvasObj = document.getElementById(canvasId);
+        this.area = initialArea || [[-2, 2], [-2, 2]];
+        this.drawMode = drawMode || 0;
+        
+        this.canvasSz = [this.canvasObj.width, this.canvasObj.height];
+        this.ctx = this.canvasObj.getContext('2d');
+        
+        rhis.mandelPlane = (function(){
+            var ret = [];
+            for (var i = 0; i < this.canvasArea[0]; i++) {
+                for (var j = 0; j < this.canvasArea[1]; j++) {
+                    var x = i * (this.area[0][1] - this.area[0][0]) + this.area[0][0];
+                    var y = i * (this.area[1][1] - this.area[1][0]) + this.area[1][0];
+        })();
+        
+        this.onMove = function(p) {
+            if (this.dragStart) {
+                this.updateDragArea(p);
+            }
+        }
+        
+        this.onLButtonDown = function(p) {
+            this.dragStart = p;
+        }
+        
+        this.onLButtonUp = function(p) {
+            this.changeArea(this.dragStart, p);
+            this.dragStart = null;
+        }
+        
+        this.onRButtonDown = function(p) {
+            this.changeArea(this.canvasArea);
+        }
+        
+        this.onRButtonUp = function(p) {
+        }
+    }
+    </script>
+</head>
+<body>
+</body>
+</html>
