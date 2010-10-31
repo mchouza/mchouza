@@ -1,11 +1,7 @@
-<!DOCTYPE html>
 <html>
-<head>
-    <title>Mandelbrot Set</title>
-    <script>
-/*
+<!--
 Copyright (c) 2010 Mariano M. Chouza
-
+ 
 Permission is hereby granted, free of charge, to any person
 obtaining a copy of this software and associated documentation
 files (the "Software"), to deal in the Software without
@@ -14,10 +10,10 @@ copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the
 Software is furnished to do so, subject to the following
 conditions:
-
+ 
 The above copyright notice and this permission notice shall be
 included in all copies or substantial portions of the Software.
-
+ 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
 EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
 OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
@@ -26,48 +22,156 @@ HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
 WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
-*/
+-->
+<head>
+    <title>Mandelbrot Set</title>
+    <script>
+var N = 512;
+var RANGE = [-2, 2];
+var ESC_RADIUS = 20;
+var LOG2 = Math.log(2);
+
+var INSIDE_OUTSIDE = 0;
+var NUM_ITERATIONS = 1;
+var FRAC_ITERATIONS = 2;
+
+var canvas = null;
+var ctx = null;
+
+var plotMode = FRAC_ITERATIONS;
+var isAPointOutside = false;
+var colorChange = false;
+
+var mandelPlane = null;
+
+var resetMandel = function(newPlotMode) {
+    if (!newPlotMode || newPlotMode !== newPlotMode) {
+        newPlotMode = 0;
+    }
+    plotMode = newPlotMode;
     
-    function MandelbrotRenderer(canvasId, initialArea, drawMode) {
-        this.canvasObj = document.getElementById(canvasId);
-        this.area = initialArea || [[-2, 2], [-2, 2]];
-        this.drawMode = drawMode || 0;
-        
-        this.canvasSz = [this.canvasObj.width, this.canvasObj.height];
-        this.ctx = this.canvasObj.getContext('2d');
-        
-        rhis.mandelPlane = (function(){
-            var ret = [];
-            for (var i = 0; i < this.canvasArea[0]; i++) {
-                for (var j = 0; j < this.canvasArea[1]; j++) {
-                    var x = i * (this.area[0][1] - this.area[0][0]) + this.area[0][0];
-                    var y = i * (this.area[1][1] - this.area[1][0]) + this.area[1][0];
-        })();
-        
-        this.onMove = function(p) {
-            if (this.dragStart) {
-                this.updateDragArea(p);
+    isAPointOutside = false;
+    colorChange = false;
+
+    mandelPlane = (function() {
+        var ret = [];
+        var dx, dy;
+        dx = dy = (RANGE[1] - RANGE[0]) / N;
+        var c = [RANGE[0], RANGE[0]];
+        for (var j = 0; j < N; j++) {
+            c[0] = RANGE[0];
+            for (var i = 0; i < N; i++) {
+                ret[i + j * N] = {
+                    'c': [c[0], c[1]],
+                    'z': [0, 0],
+                    'it': 0
+                };
+                c[0] += dx;
             }
+            c[1] += dy;
         }
-        
-        this.onLButtonDown = function(p) {
-            this.dragStart = p;
-        }
-        
-        this.onLButtonUp = function(p) {
-            this.changeArea(this.dragStart, p);
-            this.dragStart = null;
-        }
-        
-        this.onRButtonDown = function(p) {
-            this.changeArea(this.canvasArea);
-        }
-        
-        this.onRButtonUp = function(p) {
+        return ret;
+    })();
+};
+
+var step = (function() {
+    function f(z, c) {
+        return [z[0] * z[0] - z[1] * z[1] + c[0], 2 * z[0] * z[1] + c[1]];
+    }
+    
+    function abs(z) {
+        return Math.sqrt(z[0] * z[0] + z[1] * z[1]);
+    }
+    
+    function getColor(cpe) {
+        if (cpe.out) {
+            if (plotMode === INSIDE_OUTSIDE) {
+                return [255, 255, 255];
+            } else {
+                var zmod = Math.sqrt(cpe.z[0] * cpe.z[0] + cpe.z[1] * cpe.z[1]);
+                if (plotMode === NUM_ITERATIONS) {
+                    var iter = cpe.it;
+                } else {
+                    var iter = cpe.it + 1 - Math.log(Math.log(zmod)) / LOG2;
+                }
+                var l = 255 - 255 / iter;
+                return [l, l, l];
+            }
+        } else {
+            return [0, 0, 0];
         }
     }
+    
+    function walkCanvas() {           
+        if (isAPointOutside && !colorChange) {
+            return;
+        }
+        colorChange = false;
+        
+        var imd = ctx.getImageData(0, 0, N, N);
+        var cpa = imd.data;
+        
+        var idx1 = 0, idx2 = 0;
+        for (var i = 0; i < N * N; i++) {
+            var cpe = mandelPlane[i];
+            if (cpe.out) {
+                idx1 += 4;
+                continue;
+            }
+            
+            cpe.z = f(cpe.z, cpe.c);
+            cpe.it++;
+            if (abs(cpe.z) > ESC_RADIUS) {
+                isAPointOutside = true;
+                cpe.out = true;
+            }
+            
+            var color = getColor(cpe);
+            if (cpa[idx1] !== color[0]) {
+                colorChange = true;
+            }
+            cpa[idx1++] = color[0];
+            cpa[idx1++] = color[1];
+            cpa[idx1++] = color[2];
+            cpa[idx1++] = 255;
+        }
+        
+        ctx.putImageData(imd, 0, 0);
+    }
+    
+    return walkCanvas;
+})();
+
+function start() {
+    canvas = document.getElementById('main_canvas');
+    canvas.width = canvas.height = N;
+    
+    ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+	ctx.fillRect(0, 0, N, N);   
+    
+    var frags = window.location.href.split('#');
+    if (frags.length > 1) {
+        resetMandel(parseInt(frags[1]));
+    } else {
+        resetMandel(0);
+    }
+    
+    setInterval(step, 100);
+}
     </script>
 </head>
-<body>
+<body onload="start()">
+    <div style="text-align:center; width: 512">
+        <canvas id="main_canvas"></canvas>
+        <p style="font-size:12px">
+            <a href="#0" onclick="resetMandel(0)">Inside / outside</a> &ndash;
+            <a href="#1" onclick="resetMandel(1)">Iteration count</a> &ndash;
+            <a href="#2" onclick="resetMandel(2)">Fractional iterations</a>
+        </p>
+    </div>
+	<div style="text-align:right; width: 512"> 
+		<p style="font-size:12px">Por <a href="http://chouza.com.ar">Mariano M. Chouza</a>.</p> 
+	</div>
 </body>
 </html>
