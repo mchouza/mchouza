@@ -1,4 +1,7 @@
+<!DOCTYPE html>
 <html>
+<head>
+    <meta charset="UTF-8">
 <!--
 Copyright (c) 2010 Mariano M. Chouza
  
@@ -23,13 +26,13 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 -->
-<head>
     <title>Mandelbrot Set</title>
     <script>
 var N = 512;
-var RANGE = [-2, 2];
 var ESC_RADIUS = 20;
 var LOG2 = Math.log(2);
+var MAX_RANGE = 4;
+var MIN_RANGE = 0.00000095367431640625; // 2^-20
 
 var INSIDE_OUTSIDE = 0;
 var NUM_ITERATIONS = 1;
@@ -38,17 +41,27 @@ var FRAC_ITERATIONS = 2;
 var canvas = null;
 var ctx = null;
 
-var plotMode = FRAC_ITERATIONS;
+var range = [[-2, 2], [-2, 2]];
+var plotMode = null;
 var isAPointOutside = false;
 var colorChange = false;
 
 var mandelPlane = null;
 
-var resetMandel = function(newPlotMode) {
-    if (!newPlotMode || newPlotMode !== newPlotMode) {
+function isNaN(a) {
+    return a !== a;
+}
+
+var resetMandel = function(newPlotMode, newRange) {
+    if (!newPlotMode || isNaN(newPlotMode)) {
         newPlotMode = 0;
     }
+    if (!newRange || isNaN(newRange[0][0]) || isNaN(newRange[0][1]) ||
+        isNaN(newRange[1][0]) || isNaN(newRange[1][1])) {
+        newRange = range;
+    }
     plotMode = newPlotMode;
+    range = newRange;
     
     isAPointOutside = false;
     colorChange = false;
@@ -56,10 +69,11 @@ var resetMandel = function(newPlotMode) {
     mandelPlane = (function() {
         var ret = [];
         var dx, dy;
-        dx = dy = (RANGE[1] - RANGE[0]) / N;
-        var c = [RANGE[0], RANGE[0]];
+        dx = (range[0][1] - range[0][0]) / N;
+        dy = (range[1][1] - range[1][0]) / N;
+        var c = [range[0][0], range[1][0]];
         for (var j = 0; j < N; j++) {
-            c[0] = RANGE[0];
+            c[0] = range[0][0];
             for (var i = 0; i < N; i++) {
                 ret[i + j * N] = {
                     'c': [c[0], c[1]],
@@ -72,6 +86,10 @@ var resetMandel = function(newPlotMode) {
         }
         return ret;
     })();
+    
+    var dirLink = document.getElementById('dirLink');
+    dirLink.href = '#' + plotMode + ',' + range[0][0] + ',' + range[0][1] +
+        ',' + range[1][0] + ',' + range[1][1];
 };
 
 var step = (function() {
@@ -142,36 +160,96 @@ var step = (function() {
     return walkCanvas;
 })();
 
+function moveRange(p, r) {
+    if (r > MAX_RANGE) {
+        r = MAX_RANGE;
+    } else if (r < MIN_RANGE) {
+        r = MIN_RANGE;
+    }
+    
+    range[0][0] = p[0] - r / 2;
+    range[0][1] = p[0] + r / 2;
+    range[1][0] = p[1] - r / 2;
+    range[1][1] = p[1] + r / 2;
+    
+    if (range[0][0] < -MAX_RANGE / 2) {
+        range[0][0] = -MAX_RANGE / 2;
+        range[0][1] = r - MAX_RANGE / 2;
+    } else if (range[0][1] > MAX_RANGE / 2) {
+        range[0][0] = MAX_RANGE / 2 - r;
+        range[0][1] = MAX_RANGE / 2;
+    }
+    if (range[1][0] < -MAX_RANGE / 2) {
+        range[1][0] = -MAX_RANGE / 2;
+        range[1][1] = r - MAX_RANGE / 2;
+    } else if (range[1][1] > MAX_RANGE / 2) {
+        range[1][0] = MAX_RANGE / 2 - r;
+        range[1][1] = MAX_RANGE / 2;
+    }
+}
+
+function canvasOnMouseDown(e) {
+    e = e || window.event;
+    var pxPnt = [e.clientX - canvas.offsetLeft, e.clientY - canvas.offsetTop];
+    var zoomIn = (e.which == 1);
+    
+    var r = range[0][1] - range[0][0];
+    var pnt = [(pxPnt[0] / N) * r + range[0][0], (pxPnt[1] / N) * r + range[1][0]];
+    
+    if (zoomIn) {
+        r /= 2;
+    } else {
+        r *= 2;
+    }
+    moveRange(pnt, r);
+    
+    resetMandel(plotMode);
+}
+
 function start() {
     canvas = document.getElementById('main_canvas');
     canvas.width = canvas.height = N;
+    canvas.onmousedown = canvasOnMouseDown;
+    canvas.oncontextmenu = function(){ return false; };
     
     ctx = canvas.getContext('2d');
     ctx.fillStyle = '#fff';
 	ctx.fillRect(0, 0, N, N);   
     
     var frags = window.location.href.split('#');
+    var args = [];
+    var plotMode = 0;
+    var range = null;
     if (frags.length > 1) {
-        resetMandel(parseInt(frags[1]));
-    } else {
-        resetMandel(0);
+        args = frags[1].split(',');
     }
+    if (args.length >= 1) {
+        plotMode = parseInt(args[0]);
+    }
+    if (args.length >= 5) {
+        range = [[parseFloat(args[1]), parseFloat(args[2])],
+                 [parseFloat(args[3]), parseFloat(args[4])]];
+    }
+    resetMandel(plotMode, range);
     
     setInterval(step, 100);
 }
-    </script>
+</script>
 </head>
 <body onload="start()">
-    <div style="text-align:center; width: 512">
+    <div style="text-align:right; width: 512px"> 
+         <p style="font-size:12px"><a href="#" id="dirLink">Link</a></p>
+    </div>
+    <div style="text-align:center; width: 512px">
         <canvas id="main_canvas"></canvas>
         <p style="font-size:12px">
-            <a href="#0" onclick="resetMandel(0)">Inside / outside</a> &ndash;
-            <a href="#1" onclick="resetMandel(1)">Iteration count</a> &ndash;
-            <a href="#2" onclick="resetMandel(2)">Fractional iterations</a>
+            <a href="" onclick="resetMandel(0); return false">Inside / outside</a> &ndash;
+            <a href="" onclick="resetMandel(1); return false">Iteration count</a> &ndash;
+            <a href="" onclick="resetMandel(2); return false">Fractional iterations</a>
         </p>
     </div>
-	<div style="text-align:right; width: 512"> 
-		<p style="font-size:12px">Por <a href="http://chouza.com.ar">Mariano M. Chouza</a>.</p> 
-	</div>
+    <div style="text-align:right; width: 512px"> 
+        <p style="font-size:12px">Por <a href="http://chouza.com.ar">Mariano M. Chouza</a>.</p> 
+    </div>
 </body>
 </html>
