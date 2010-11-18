@@ -15,7 +15,9 @@ def tsp_dp_solve(d):
     def memoize(f):
         memo_dict = {}
         def memo_func(*args):
-            return memo_dict.get(args, f(*args))
+            if args not in memo_dict:
+                memo_dict[args] = f(*args)
+            return memo_dict[args]
         memo_func.clear = lambda: memo_dict.clear()
         return memo_func
 
