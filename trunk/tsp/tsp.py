@@ -10,8 +10,31 @@ def tsp_naive_solve(d):
                          for t in permutations(range(1, len(d))))
     return best_tour
 
+def tsp_rec_solve(d):
+    def rec_tsp_solve(c, ts):
+        assert c not in ts
+        if ts:
+            return min((d[lc][c] + rec_tsp_solve(lc, ts - set([lc]))[0], lc)
+                       for lc in ts)
+        else:
+            return (d[0][c], 0)
+
+    best_tour = []
+    c = 0
+    cs = set(range(1, len(d)))
+    while True:
+        l, lc = rec_tsp_solve(c, cs)
+        if lc == 0:
+            break
+        best_tour.append(lc)
+        c = lc
+        cs = cs - set([lc])
+
+    best_tour = tuple(reversed(best_tour))
+
+    return best_tour
+
 def tsp_dp_solve(d):
-    
     def memoize(f):
         memo_dict = {}
         def memo_func(*args):
@@ -25,8 +48,7 @@ def tsp_dp_solve(d):
     def rec_tsp_solve(c, ts):
         assert c not in ts
         if ts:
-            return min((d[lc][c] + rec_tsp_solve(lc, ts - frozenset([lc]))[0],
-                        lc)
+            return min((d[lc][c] + rec_tsp_solve(lc, ts - set([lc]))[0], lc)
                        for lc in ts)
         else:
             return (d[0][c], 0)
@@ -80,6 +102,16 @@ if __name__ == '__main__':
     assert tsp_naive_solve(d2) == (3, 2, 1)
 
     #
+    # recursive TSP tests
+    #
+
+    # 2 cities
+    assert tsp_rec_solve(d) == (1, 2)
+    
+    # 3 cities
+    assert tsp_rec_solve(d2) == (3, 2, 1)
+
+    #
     # DP TSP tests
     #
 
@@ -98,9 +130,9 @@ if __name__ == '__main__':
     d3 = [[random.randint(1, 10) if i != j else 0 for i in range(7)]
           for j in range(7)]
 
-    assert tsp_naive_solve(d3) == tsp_dp_solve(d3)
+    assert tsp_naive_solve(d3) == tsp_rec_solve(d3) == tsp_dp_solve(d3)
 
     d4 = [[random.randint(1, 10) if i != j else 0 for i in range(10)]
           for j in range(10)]
 
-    assert tsp_naive_solve(d4) == tsp_dp_solve(d4)
+    assert tsp_naive_solve(d4) == tsp_rec_solve(d4) == tsp_dp_solve(d4)
