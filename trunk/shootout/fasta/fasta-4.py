@@ -6,7 +6,7 @@
 # modified by Justin Peel
 # modified by Mariano Chouza
 
-import sys, bisect
+import sys, bisect, array
 
 alu = (
    'GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGG'
@@ -27,15 +27,7 @@ homosapiens = [
 ]
 
 IM = 139968
-
-def genRandom(ia = 3877, ic = 29573, im = IM):
-    seed = 42
-    lut = [(s * ia + ic) % im for s in xrange(IM)]
-    while 1:
-        seed = lut[seed]
-        yield seed
-
-Random = genRandom()
+INITIAL_STATE = 42
 
 def makeCumulative(table):
     P = []
@@ -46,6 +38,13 @@ def makeCumulative(table):
         P += [prob]
         C += [char]
     return (P, C)
+
+randomGenState = INITIAL_STATE
+randomLUT = None
+def makeRandomLUT():
+    global randomLUT
+    ia = 3877; ic = 29573
+    randomLUT = [(s * ia + ic) % IM for s in xrange(IM)]
 
 def makeLookupTable(table):
     bb = bisect.bisect
@@ -64,18 +63,30 @@ def repeatFasta(src, n):
         print s[-(n % width):]
 
 def randomFasta(table, n):
+    global randomLUT, randomGenState
     width = 60
-    r = xrange(width)
-    gR = Random.next
-    jn = ''.join
+    rgs = randomGenState
+    rlut = randomLUT
+    
     lut = makeLookupTable(table)
-    lines = [jn([lut[gR()] for i in r]) for j in xrange(n // width)]
-    if n % width:
-        lines.append(jn([lut[gR()] for i in xrange(n % width)]))
-    print '\n'.join(lines)
+    big_buffer = []
+    ba = big_buffer.append
+    
+    for i in xrange(n):
+        rgs = rlut[rgs]
+        ba(lut[rgs])
+    
+    s = ''.join(big_buffer)
+    for i in xrange(width, n, width):
+        print s[i-width:i]
+    print s[i:]
+    
+    randomGenState = rgs
 
 def main():
     n = int(sys.argv[1])
+
+    makeRandomLUT()
 
     print '>ONE Homo sapiens alu'
     repeatFasta(alu, n*2)
@@ -85,4 +96,5 @@ def main():
 
     print '>THREE Homo sapiens frequency'
     randomFasta(homosapiens, n*5)
+    
 main()
