@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<!--
+Copyright (c) 2011 Mariano M. Chouza
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use,
+copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+-->
+<!-- Contains some elements of the WebGL tutorial at http://learningwebgl.com/lessons/lesson05/index.html -->
+<html>
+<head>
+<title>Solving Laplace Equation with WebGL - Version 1</title>
+<script id="shader-fs-init" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+varying vec2 vTextureCoord;
+
+void main(void)
+{
+    vec2 d1 = vTextureCoord - vec2(0.25, 0.5);
+    vec2 d2 = vTextureCoord - vec2(0.75, 0.5);
+    float dist1sq = dot(d1, d1);
+    float dist2sq = dot(d2, d2);
+	
+    if (dist1sq < 0.1 * 0.1) {
+        gl_FragColor = vec4(1.0, 1.0, 0.0, 1.0);
+    } else if (dist2sq < 0.1 * 0.1) {
+        gl_FragColor = vec4(0.5, 0.0, 0.0, 0.0);
+    } else {
+        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    }
+}
+</script>
+<script id="shader-fs-laplace" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+varying vec2 vTextureCoord;
+
+uniform highp sampler2D uSampler;
+uniform int uTexSize;
+
+void main(void)
+{
+    float delta = 1.0 / float(uTexSize);
+    vec2 d1 = vTextureCoord - vec2(0.25, 0.5);
+    vec2 d2 = vTextureCoord - vec2(0.75, 0.5);
+    float dist1sq = dot(d1, d1);
+    float dist2sq = dot(d2, d2);
+	
+    if (dist1sq < 0.1 * 0.1) {
+        gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+    } else if (dist2sq < 0.1 * 0.1) {
+        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    } else {
+		vec4 wc = texture2D(uSampler, vec2(vTextureCoord.s - delta, vTextureCoord.t));
+		vec4 ec = texture2D(uSampler, vec2(vTextureCoord.s + delta, vTextureCoord.t));
+		vec4 sc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t - delta));
+		vec4 nc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t + delta));
+        float val = (wc.r + ec.r + nc.r + sc.r) / 4.0 +
+			(wc.g + ec.g + nc.g + sc.g) / (4.0 * 255.0);
+		float hi = val - mod(val, 1.0 / 255.0);
+		val = (val - hi) * 255.0;
+		float lo = val;
+        gl_FragColor = vec4(hi, lo, 0.0, 1.0);
+    }
+}
+</script>
+<script id="shader-fs-straight" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+varying vec2 vTextureCoord;
+
+uniform highp sampler2D uSampler;
+uniform int uTexSize;
+
+
+void main(void)
+{
+	vec4 src = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+	float brightness = src.r;
+	gl_FragColor = vec4(brightness, brightness, brightness, 1.0);
+}
+</script>
+<script id="shader-vs" type="x-shader/x-vertex">
+attribute vec3 aVertexPosition;
+attribute vec2 aTextureCoord;
+
+varying vec2 vTextureCoord;
+
+void main(void)
+{
+    gl_Position = vec4(aVertexPosition, 1.0);
+    vTextureCoord = aTextureCoord;
+}
+</script>
+<script type="text/javascript">
+var N = 32;
+var PROGS_DESC = {
+    'laplace': {
+        'vs': 'shader-vs',
+        'fs': 'shader-fs-laplace',
+        'attribs': ['aVertexPosition', 'aTextureCoord'],
+        'uniforms': ['uSampler', 'uTexSize']
+    },
+    'straight': {
+        'vs': 'shader-vs',
+        'fs': 'shader-fs-straight',
+        'attribs': ['aVertexPosition', 'aTextureCoord'],
+        'uniforms': ['uSampler', 'uTexSize']
+    }
+};
+
+var gl;
+function initGL(canvas) {
+    gl = canvas.getContext("experimental-webgl");
+    gl.viewport(0, 0, canvas.width, canvas.height);
+}
+
+function getShader(id) {
+    var shaderScript = document.getElementById(id);
+    var str = "";
+    var k = shaderScript.firstChild;
+    while (k) {
+        if (k.nodeType == 3) {
+            str += k.textContent;
+        }
+        k = k.nextSibling;
+    }
+
+    var shader;
+    if (shaderScript.type == "x-shader/x-fragment") {
+        shader = gl.createShader(gl.FRAGMENT_SHADER);
+    } else if (shaderScript.type == "x-shader/x-vertex") {
+        shader = gl.createShader(gl.VERTEX_SHADER);
+    } else {
+        return null;
+    }
+
+    gl.shaderSource(shader, str);
+    gl.compileShader(shader);
+
+    return shader;
+}
+
+function loadProgs(desc) {
+    var progs = {};
+    for (var id in desc) {
+        progs[id] = gl.createProgram();
+        gl.attachShader(progs[id], getShader(desc[id].vs));
+        gl.attachShader(progs[id], getShader(desc[id].fs));
+        gl.linkProgram(progs[id]);
+        
+        for (var i = 0; i < desc[id].attribs.length; i++) {
+            progs[id][desc[id].attribs[i]] = gl.getAttribLocation(progs[id], desc[id].attribs[i]);
+            gl.enableVertexAttribArray(progs[id][desc[id].attribs[i]]);
+        }
+        
+        for (var i = 0; i < desc[id].uniforms.length; i++) {
+            progs[id][desc[id].uniforms[i]] = gl.getUniformLocation(progs[id], desc[id].uniforms[i]);
+        }
+    }
+    return progs;
+}
+
+var progs;
+function initShaders() {
+    progs = loadProgs(PROGS_DESC);
+}
+
+var framebuffer;
+var texTgt;
+var texSrc;
+function initTextureFramebuffer(n) {
+    framebuffer = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+    framebuffer.width = n;
+    framebuffer.height = n;
+
+    texTgt = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texTgt);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT );
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, framebuffer.width, framebuffer.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+
+    var renderbuffer = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, renderbuffer);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, framebuffer.width, framebuffer.height);
+
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texTgt, 0);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, renderbuffer);
+  
+    texSrc = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texSrc);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT );
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, framebuffer.width, framebuffer.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
+var vtxPosBuffer;
+var vtxTCBuffer;
+var vtxIndBuffer;
+function initVtxBuffers() {
+    vtxPosBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vtxPosBuffer);
+    vtxPos = [
+        -1.0, -1.0,  1.0,
+         1.0, -1.0,  1.0,
+         1.0,  1.0,  1.0,
+        -1.0,  1.0,  1.0,
+    ];
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vtxPos), gl.STATIC_DRAW);
+    vtxPosBuffer.itemSize = 3;
+    vtxPosBuffer.numItems = 4;
+
+    vtxTCBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vtxTCBuffer);
+    var vtxTC = [
+        0.0, 0.0,
+        1.0, 0.0,
+        1.0, 1.0,
+        0.0, 1.0,
+    ];
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vtxTC), gl.STATIC_DRAW);
+    vtxTCBuffer.itemSize = 2;
+    vtxTCBuffer.numItems = 4;
+
+    vtxIndBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vtxIndBuffer);
+    var vtxInd = [
+        0, 1, 2, 0, 2, 3,
+    ];
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(vtxInd), gl.STATIC_DRAW);
+    vtxIndBuffer.itemSize = 1;
+    vtxIndBuffer.numItems = 6;
+}
+
+function updateState() {
+    gl.useProgram(progs.laplace);
+    gl.uniform1i(progs.laplace.uTexSize, framebuffer.width);
+    
+    gl.bindBuffer(gl.ARRAY_BUFFER, vtxPosBuffer);
+    gl.vertexAttribPointer(progs.laplace.aVertexPosition, vtxPosBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, vtxTCBuffer);
+    gl.vertexAttribPointer(progs.laplace.aTextureCoord, vtxTCBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vtxIndBuffer);
+    
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texSrc);
+    gl.uniform1i(progs.laplace.uSampler, 0);
+    
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texTgt, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawElements(gl.TRIANGLES, vtxIndBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    
+    var t = texSrc;
+    texSrc = texTgt;
+    texTgt = t;
+}
+
+function drawScene() {
+    gl.useProgram(progs.straight);
+    gl.uniform1i(progs.straight.uTexSize, framebuffer.width);
+    
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawElements(gl.TRIANGLES, vtxIndBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+}
+
+function tick() {
+    updateState();
+    drawScene();
+}
+
+function webGLStart() {
+    var canvas = document.getElementById("main-canvas");
+    initGL(canvas);
+    initShaders();
+    initVtxBuffers();
+    initTextureFramebuffer(N);
+
+    setInterval(tick, 0);
+}
+</script>
+</head>
+<body onload="webGLStart();">
+  <canvas id="main-canvas" style="border: none;" width="512" height="512"></canvas>
+</body>
+</html>
