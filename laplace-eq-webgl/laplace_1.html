@@ -43,9 +43,9 @@ void main(void)
     if (dist1sq < 0.1 * 0.1) {
         gl_FragColor = vec4(1.0, 1.0, 0.0, 1.0);
     } else if (dist2sq < 0.1 * 0.1) {
-        gl_FragColor = vec4(0.5, 0.0, 0.0, 0.0);
-    } else {
         gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    } else {
+        gl_FragColor = vec4(0.5, 0.0, 0.0, 0.0);
     }
 }
 </script>
@@ -61,16 +61,9 @@ uniform int uTexSize;
 void main(void)
 {
     float delta = 1.0 / float(uTexSize);
-    vec2 d1 = vTextureCoord - vec2(0.25, 0.5);
-    vec2 d2 = vTextureCoord - vec2(0.75, 0.5);
-    float dist1sq = dot(d1, d1);
-    float dist2sq = dot(d2, d2);
-	
-    if (dist1sq < 0.1 * 0.1) {
-        gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
-    } else if (dist2sq < 0.1 * 0.1) {
-        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-    } else {
+    vec4 c = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+    
+    if (c.a != 1.0 ) {
 		vec4 wc = texture2D(uSampler, vec2(vTextureCoord.s - delta, vTextureCoord.t));
 		vec4 ec = texture2D(uSampler, vec2(vTextureCoord.s + delta, vTextureCoord.t));
 		vec4 sc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t - delta));
@@ -80,7 +73,9 @@ void main(void)
 		float hi = val - mod(val, 1.0 / 255.0);
 		val = (val - hi) * 255.0;
 		float lo = val;
-        gl_FragColor = vec4(hi, lo, 0.0, 1.0);
+        gl_FragColor = vec4(hi, lo, 0.0, 0.0);
+    } else {
+        gl_FragColor = c;
     }
 }
 </script>
@@ -116,6 +111,12 @@ void main(void)
 <script type="text/javascript">
 var N = 32;
 var PROGS_DESC = {
+    'init': {
+        'vs': 'shader-vs',
+        'fs': 'shader-fs-init',
+        'attribs': ['aVertexPosition', 'aTextureCoord'],
+        'uniforms': []
+    },
     'laplace': {
         'vs': 'shader-vs',
         'fs': 'shader-fs-laplace',
@@ -262,6 +263,24 @@ function initVtxBuffers() {
     vtxIndBuffer.numItems = 6;
 }
 
+function initState() {
+    gl.useProgram(progs.init);
+    
+    gl.bindBuffer(gl.ARRAY_BUFFER, vtxPosBuffer);
+    gl.vertexAttribPointer(progs.init.aVertexPosition, vtxPosBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, vtxTCBuffer);
+    gl.vertexAttribPointer(progs.init.aTextureCoord, vtxTCBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vtxIndBuffer);
+     
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texSrc, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawElements(gl.TRIANGLES, vtxIndBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
 function updateState() {
     gl.useProgram(progs.laplace);
     gl.uniform1i(progs.laplace.uTexSize, framebuffer.width);
@@ -309,6 +328,8 @@ function webGLStart() {
     initVtxBuffers();
     initTextureFramebuffer(N);
 
+    initState();
+    
     setInterval(tick, 0);
 }
 </script>
