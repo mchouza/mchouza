@@ -68,11 +68,11 @@ void main(void)
 		vec4 ec = texture2D(uSampler, vec2(vTextureCoord.s + delta, vTextureCoord.t));
 		vec4 sc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t - delta));
 		vec4 nc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t + delta));
+        
         float val = (wc.r + ec.r + nc.r + sc.r) / 4.0 +
 			(wc.g + ec.g + nc.g + sc.g) / (4.0 * 255.0);
 		float hi = val - mod(val, 1.0 / 255.0);
-		val = (val - hi) * 255.0;
-		float lo = val;
+		float lo = (val - hi) * 255.0;
         gl_FragColor = vec4(hi, lo, 0.0, 0.0);
     } else {
         gl_FragColor = c;
@@ -323,10 +323,15 @@ function tick() {
 
 function webGLStart() {
     var canvas = document.getElementById("main-canvas");
+    var n = parseInt(window.location.href.split('#')[1]);
+    if (isNaN(n)) {
+        n = 32;
+    }
+    
     initGL(canvas);
     initShaders();
     initVtxBuffers();
-    initTextureFramebuffer(N);
+    initTextureFramebuffer(n);
 
     initState();
     
