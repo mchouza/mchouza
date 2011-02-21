@@ -63,7 +63,7 @@ uniform int uTexSize;
 void main(void)
 {
     float delta = 1.0 / float(uTexSize);
-    vec4 c = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+    vec4 c = texture2D(uSampler, vTextureCoord);
     
     if (c.a != 1.0 ) {
 		vec4 wc = texture2D(uSampler, vec2(vTextureCoord.s - delta, vTextureCoord.t));
@@ -78,6 +78,33 @@ void main(void)
         gl_FragColor = vec4(hi, lo, 0.0, 0.0);
     } else {
         gl_FragColor = c;
+    }
+}
+</script>
+<script id="shader-fs-grid-change" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+varying vec2 vTextureCoord;
+
+uniform highp sampler2D uSampler;
+uniform int uTexSize;
+
+void main(void)
+{
+    float delta = 1.0 / float(uTexSize);
+    vec2 d1 = vTextureCoord - vec2(0.25, 0.5);
+    vec2 d2 = vTextureCoord - vec2(0.75, 0.5);
+    float dist1sq = dot(d1, d1);
+    float dist2sq = dot(d2, d2);
+    vec4 c = texture2D(uSampler, vTextureCoord);
+	
+    if (dist1sq < 0.1 * 0.1) {
+        gl_FragColor = vec4(1.0, 1.0, 0.0, 1.0);
+    } else if (dist2sq < 0.1 * 0.1) {
+        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    } else {
+        gl_FragColor = vec4(c.r, c.g, 0.0, 0.0);
     }
 }
 </script>
@@ -111,13 +138,23 @@ void main(void)
 }
 </script>
 <script type="text/javascript">
-var N = 32;
+var START_N = 8;
+var END_N = 512;
+
+var STEPS_PER_LEVEL = 20;
+
 var PROGS_DESC = {
     'init': {
         'vs': 'shader-vs',
         'fs': 'shader-fs-init',
         'attribs': ['aVertexPosition', 'aTextureCoord'],
         'uniforms': []
+    },
+    'changeGrid': {
+        'vs': 'shader-vs',
+        'fs': 'shader-fs-grid-change',
+        'attribs': ['aVertexPosition', 'aTextureCoord'],
+        'uniforms': ['uSampler', 'uTexSize']
     },
     'laplace': {
         'vs': 'shader-vs',
@@ -132,6 +169,9 @@ var PROGS_DESC = {
         'uniforms': ['uSampler', 'uTexSize']
     }
 };
+
+var n = START_N;
+var tickNumber = 0;
 
 var gl;
 function initGL(canvas) {
@@ -190,6 +230,19 @@ function initShaders() {
     progs = loadProgs(PROGS_DESC);
 }
 
+function createTexture(n) {
+    var tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT );
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, n, n, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    tex.n = n;
+    return tex;
+}
+
 var framebuffer;
 var texTgt;
 var texSrc;
@@ -199,30 +252,14 @@ function initTextureFramebuffer(n) {
     framebuffer.width = n;
     framebuffer.height = n;
 
-    texTgt = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texTgt);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT );
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT );
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, framebuffer.width, framebuffer.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    texSrc = createTexture(n);
+    texTgt = createTexture(n);
 
     var renderbuffer = gl.createRenderbuffer();
     gl.bindRenderbuffer(gl.RENDERBUFFER, renderbuffer);
-    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, framebuffer.width, framebuffer.height);
-
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texTgt, 0);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, n, n);
     gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, renderbuffer);
-  
-    texSrc = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texSrc);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT );
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT );
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, framebuffer.width, framebuffer.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     
-    gl.bindTexture(gl.TEXTURE_2D, null);
     gl.bindRenderbuffer(gl.RENDERBUFFER, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 }
@@ -283,31 +320,27 @@ function initState() {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 }
 
-function updateState() {
-    gl.useProgram(progs.laplace);
-    gl.uniform1i(progs.laplace.uTexSize, framebuffer.width);
+function updateState(texTgt, texSrc, prog) {
+    gl.useProgram(prog);
+    gl.uniform1i(prog.uTexSize, texTgt.n);
     
     gl.bindBuffer(gl.ARRAY_BUFFER, vtxPosBuffer);
-    gl.vertexAttribPointer(progs.laplace.aVertexPosition, vtxPosBuffer.itemSize, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribPointer(prog.aVertexPosition, vtxPosBuffer.itemSize, gl.FLOAT, false, 0, 0);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, vtxTCBuffer);
-    gl.vertexAttribPointer(progs.laplace.aTextureCoord, vtxTCBuffer.itemSize, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribPointer(prog.aTextureCoord, vtxTCBuffer.itemSize, gl.FLOAT, false, 0, 0);
 
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vtxIndBuffer);
     
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texSrc);
-    gl.uniform1i(progs.laplace.uSampler, 0);
+    gl.uniform1i(prog.uSampler, 0);
     
     gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texTgt, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawElements(gl.TRIANGLES, vtxIndBuffer.numItems, gl.UNSIGNED_SHORT, 0);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    
-    var t = texSrc;
-    texSrc = texTgt;
-    texTgt = t;
 }
 
 function drawScene() {
@@ -318,22 +351,39 @@ function drawScene() {
     gl.drawElements(gl.TRIANGLES, vtxIndBuffer.numItems, gl.UNSIGNED_SHORT, 0);
 }
 
+function updateTextures(n) {   
+    oldTexSrc = texSrc;
+    oldTexTgt = texTgt;
+    
+    initTextureFramebuffer(n);
+    
+    updateState(texSrc, oldTexSrc, progs.changeGrid);
+}
+
 function tick() {
-    updateState();
+    tickNumber++;
+
+    if ((n < END_N) && (tickNumber === STEPS_PER_LEVEL)) {
+        tickNumber = 0;
+        n *= 2;
+        updateTextures(n);
+    }
+
+    updateState(texTgt, texSrc, progs.laplace);
     drawScene();
+    
+    var t = texSrc;
+    texSrc = texTgt;
+    texTgt = t;
 }
 
 function webGLStart() {
     var canvas = document.getElementById("main-canvas");
-    var n = parseInt(window.location.href.split('#')[1]);
-    if (isNaN(n)) {
-        n = 32;
-    }
     
     initGL(canvas);
     initShaders();
     initVtxBuffers();
-    initTextureFramebuffer(n);
+    initTextureFramebuffer(START_N);
 
     initState();
     
