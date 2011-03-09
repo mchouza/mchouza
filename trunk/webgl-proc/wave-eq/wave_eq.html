@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<!--
+Copyright (c) 2011 Mariano M. Chouza
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use,
+copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+-->
+<html>
+<head>
+<title>Doing waves with WebGL</title>
+<script>
+</script>
+</head>
+<body>
+  <canvas id="main-canvas" style="border: none;" width="512" height="512"></canvas> <br>
+  <canvas id="controls-canvas" style="border: none;" width="512" height="100"></canvas>
+  <div style="width: 512px; text-align:right">
+    <p style="font-size:12px">Created by <a href="http://chouza.com.ar">Mariano M. Chouza</a>.</p>
+  </div>
+  <script> 
+  // app object
+  var WAVE_EQ_APP = {};
+  
+  // draw mode controls description
+  WAVE_EQ_APP.DRAW_GUI_DESC = {};
+  
+  // simulation mode controls description
+  WAVE_EQ_APP.SIM_GUI_DESC = {};
+  
+  // point radius
+  WAVE_EQ_APP.LINE_WIDTH = 5;
+  
+  // set controls from a description
+  WAVE_EQ_APP.setControls = function(desc) {
+    // FIXME
+    var ctrlCanvas = document.getElementById('controls-canvas');
+    ctrlCanvas.onmousedown = function(e){WAVE_EQ_APP.toSimMode();};
+  };
+  
+  // draws a small white circle at a given point in the canvas
+  WAVE_EQ_APP.drawLine = function(x1, y1, x2, y2) {
+    this.mainCtx.strokeStyle = '#fff';
+    this.mainCtx.lineWidth = this.LINE_WIDTH;
+    this.mainCtx.lineCap = 'round';
+    this.mainCtx.lineJoin = 'round';
+    this.mainCtx.beginPath();
+    this.mainCtx.moveTo(x1, y1);
+    this.mainCtx.lineTo(x2, y2);
+    this.mainCtx.stroke();
+  };
+  
+  // gets a texture from a given canvas
+  WAVE_EQ_APP.texFromCanvas = function(canvas) {
+    var gl = this.gl;
+    var tex = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    return tex;
+  };
+  
+  // draw mode event handler
+  WAVE_EQ_APP.drawEventHandler = function(type, e) {
+    var x = e.clientX - this.drawState.baseX;
+    var y = e.clientY - this.drawState.baseY;
+    if (type === 'down') {
+      this.drawState.prevPoint = [x, y];
+    } else if (type === 'up') {
+      this.drawLine(this.drawState.prevPoint[0], this.drawState.prevPoint[1], x, y);
+      this.drawState.prevPoint = null;
+    } else if (type === 'move') {
+      if (this.drawState.prevPoint !== null) {
+        this.drawLine(this.drawState.prevPoint[0], this.drawState.prevPoint[1], x, y);
+        this.drawState.prevPoint = [x, y];
+      }
+    }
+  };
+  
+  // simulation mode event handler
+  WAVE_EQ_APP.simEventHandler = function(type, e) {
+  };
+  
+  // transitions to draw mode
+  WAVE_EQ_APP.toDrawMode = function() {
+    // creates a new main canvas, paints it black and sets its handlers
+    var newMainCanvas = document.createElement('canvas');
+    newMainCanvas.id = 'main-canvas';
+    newMainCanvas.style = 'border: none';
+    newMainCanvas.width = 512;
+    newMainCanvas.height = 512;
+    this.gl = null;
+    this.mainCtx = newMainCanvas.getContext('2d');
+    this.mainCtx.fillStyle = '#000';
+    this.mainCtx.fillRect(0, 0, 512, 512);
+    newMainCanvas.onmousemove = function(e){WAVE_EQ_APP.drawEventHandler('move', e);};
+    newMainCanvas.onmousedown = function(e){WAVE_EQ_APP.drawEventHandler('down', e);};
+    newMainCanvas.onmouseup = function(e){WAVE_EQ_APP.drawEventHandler('up', e);};
+    
+    // initializes the draw state
+    this.drawState = {
+      prevPoint: null,
+      baseX: newMainCanvas.offsetLeft,
+      baseY: newMainCanvas.offsetTop
+    };
+  
+    // replaces the old main canvas by the new one
+    var oldMainCanvas = document.getElementById('main-canvas');
+    oldMainCanvas.parentNode.replaceChild(newMainCanvas, oldMainCanvas);
+    
+    // sets the draw controls
+    this.setControls(this.DRAW_GUI_DESC);
+  };
+  
+  // transitions to simulation mode
+  WAVE_EQ_APP.toSimMode = function() {
+    // creates a new main canvas and sets its handlers
+    var newMainCanvas = document.createElement('canvas');
+    newMainCanvas.id = 'main-canvas';
+    newMainCanvas.style = 'border: none';
+    newMainCanvas.width = 512;
+    newMainCanvas.height = 512;
+    this.mainCtx = null;
+    newMainCanvas.onmousemove = function(e){WAVE_EQ_APP.simEventHandler('move', e);}
+    newMainCanvas.onmousedown = function(e){WAVE_EQ_APP.simEventHandler('down', e);}
+    newMainCanvas.onmouseup = function(e){WAVE_EQ_APP.simEventHandler('up', e);}
+    
+    // replaces the old main canvas by the new one
+    var oldMainCanvas = document.getElementById('main-canvas');
+    oldMainCanvas.parentNode.replaceChild(newMainCanvas, oldMainCanvas);
+    
+    // gets the WebGL context and sets the viewport
+    this.gl = newMainCanvas.getContext("experimental-webgl");
+    this.gl.viewport(0, 0, newMainCanvas.width, newMainCanvas.height);
+    
+    // gets the walls texture from the old canvas
+    var wallsTex = this.texFromCanvas(oldMainCanvas);
+    
+    // sets the simulation controls
+    this.setControls(this.SIM_GUI);
+  };
+  
+  // starts in draw mode
+  WAVE_EQ_APP.toDrawMode();
+  </script>
+</body>
+</html>
