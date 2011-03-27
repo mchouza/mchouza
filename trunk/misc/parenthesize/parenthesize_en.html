@@ -3,38 +3,116 @@
 <head>
   <title>Parenthesizator</title>
   <script src="parenthesize.js"></script>
+  <style>
+  p.sol { font-family: monospace; }
+  p.error { color: #c00; }
+  </style>
 </head>
 <body>
   <h1>Parenthesizator</h1>
-  <p>
-  Input the expression without parenthesis in the left hand side and the desired result in the right hand side:
-  </p>
+  <h2>Initial data</h2>
+  <p>Input the expression without parenthesis (using +, -, * and / as operators) in the left hand side and the desired result in the right hand side:</p>
   <form>
   <input type="text" id="lhs">
   <strong>=</strong>
   <input type="text" id="rhs">
   </form>
-  <p id="sols">
-  </p>
+  <h2>Solutions</h2>
+  <div id="output">
+  </div>
   <script>
 function $(id)
 {
   return document.getElementById(id);
 }
 
-function updateParenthesizations()
+// cleans output area
+function cleanOutputArea()
 {
-  var expr = $('lhs').value;
-  var result = $('rhs').value;
-  var sols = [];
-  if (expr !== '' && result !== '') {
-    sols = parenthesize(expr, result);
+  // just removes all the children of the 'output' div
+  var outputArea = $('output');
+  while (outputArea.hasChildNodes()) {
+    outputArea.removeChild(outputArea.firstChild);
   }
-  $('sols').innerText = sols;
 }
 
+// adds a solution to the output area
+function addSolution(sol)
+{
+  // creates a paragraph node for the solution
+  var solutionP = document.createElement('p');
+  var solutionTxt = document.createTextNode(sol);
+  solutionP.appendChild(solutionTxt);
+  solutionP.className = 'sol';
+  
+  // appends this node to the output area
+  $('output').appendChild(solutionP);
+}
+
+// adds an error message to the output area
+function addError(error)
+{
+  // creates a paragraph node for the error
+  var errorP = document.createElement('p');
+  var errorTxt = document.createTextNode(error);
+  errorP.appendChild(errorTxt);
+  errorP.className = 'error';
+  
+  // appends this node to the output area
+  $('output').appendChild(errorP);
+}
+
+// updates parenthesizations
+function updateParenthesizations()
+{
+  // cleans up output area
+  cleanOutputArea();
+  
+  // gets the expression and the result text strings
+  var expr = $('lhs').value;
+  var result = $('rhs').value;
+  
+  // if one or more of the inputs are empty, exits without error
+  if (expr === '' || result === '') {
+    return;
+  }
+  
+  // checks these strings
+  var error = false;
+  if (!EXPRESSION_RE.test(expr)) {
+    addError('Invalid expression syntax.');
+    error = true;
+  }
+  if (!RESULT_RE.test(result)) {
+    addError('Invalid result syntax.');
+    error = true;
+  }
+  if (error) {
+    return;
+  }
+  
+  // gets the solutions
+  try {
+    var sols = parenthesize(expr, result);
+  } catch(e) {
+    alert('INTERNAL ERROR');
+    return;
+  }
+  
+  // if there are solutions, adds them to the output area
+  if (sols.length > 0) {
+    for (var i = 0; i < sols.length; i++) {
+      addSolution(sols[i]);
+    }
+  } else {
+    addError('There are no solutions.');
+  }
+}
+
+// initialization function
 function init()
 {
+  // adds the event handlers to update the solution *when the input is already updated*
   $('lhs').onkeyup = updateParenthesizations;
   $('rhs').onkeyup = updateParenthesizations;
 }
