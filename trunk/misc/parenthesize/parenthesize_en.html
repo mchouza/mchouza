@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Parenthesizator</title>
+  <script src="parenthesize.js"></script>
+</head>
+<body>
+  <h1>Parenthesizator</h1>
+  <p>
+  Input the expression without parenthesis in the left hand side and the desired result in the right hand side:
+  </p>
+  <form>
+  <input type="text" id="lhs">
+  <strong>=</strong>
+  <input type="text" id="rhs">
+  </form>
+  <p id="sols">
+  </p>
+  <script>
+function $(id)
+{
+  return document.getElementById(id);
+}
+
+function updateParenthesizations()
+{
+  var expr = $('lhs').value;
+  var result = $('rhs').value;
+  var sols = [];
+  if (expr !== '' && result !== '') {
+    sols = parenthesize(expr, result);
+  }
+  $('sols').innerText = sols;
+}
+
+function init()
+{
+  $('lhs').onkeyup = updateParenthesizations;
+  $('rhs').onkeyup = updateParenthesizations;
+}
+
+init();
+  </script>
+</body>
+</html>
