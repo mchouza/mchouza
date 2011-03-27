@@ -1,7 +1,7 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
 <head>
-  <title>Parenthesizator</title>
+  <title>Parentesizador</title>
   <script src="parenthesize.js"></script>
   <script src="dom_manip.js"></script>
   <style>
@@ -10,15 +10,15 @@
   </style>
 </head>
 <body>
-  <h1>Parenthesizator</h1>
-  <h2>Initial data</h2>
-  <p>Input the expression without parenthesis (using +, -, * and / as operators) in the left hand side and the desired result in the right hand side:</p>
+  <h1>Parentesizador</h1>
+  <h2>Datos de entrada</h2>
+  <p>Ingrese la expresión sin utilizar paréntesis (usando +, -, . y : como operadores) en el lado izquierdo y el resultado deseado en el lado derecho:</p>
   <form>
   <input type="text" id="lhs">
   <strong>=</strong>
   <input type="text" id="rhs">
   </form>
-  <h2>Solutions</h2>
+  <h2>Soluciones</h2>
   <div id="output">
   </div>
   <script>
@@ -28,6 +28,11 @@ function updateParenthesizations()
   // gets the expression and the result text strings
   var expr = $('lhs').value;
   var result = $('rhs').value;
+  
+  // replaces the operators by their normalized versions before updating
+  expr = expr.replace(/\./g, '*');
+  expr = expr.replace(/:/g, '/');
+  expr = expr.replace(/,/g, '.');
 
   // cleans up output area
   cleanOutputArea();
@@ -40,11 +45,11 @@ function updateParenthesizations()
   // checks these strings
   var error = false;
   if (!EXPRESSION_RE.test(expr)) {
-    addError('Invalid expression syntax.');
+    addError('La sintaxis de la expresión no es válida.');
     error = true;
   }
   if (!RESULT_RE.test(result)) {
-    addError('Invalid result syntax.');
+    addError('La sintaxis del resultado no es válida.');
     error = true;
   }
   if (error) {
@@ -65,7 +70,7 @@ function updateParenthesizations()
       addSolution(sols[i]);
     }
   } else {
-    addError('There are no solutions.');
+    addError('No hay soluciones.');
   }
 }
   
