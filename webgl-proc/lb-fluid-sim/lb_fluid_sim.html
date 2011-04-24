@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<!--
+Copyright (c) 2011 Mariano M. Chouza
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use,
+copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+-->
+<html>
+<head>
+<title>Fluid simulation with WebGL</title>
+<script id="shader-fs-init" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+varying vec2 vTextureCoord;
+
+void main(void)
+{
+    vec2 d1 = vTextureCoord - vec2(0.25, 0.5);
+    vec2 d2 = vTextureCoord - vec2(0.75, 0.5);
+    float dist1sq = dot(d1, d1);
+    float dist2sq = dot(d2, d2);
+	
+    if (dist1sq < 0.1 * 0.1) {
+        gl_FragColor = vec4(1.0, 1.0, 0.0, 1.0);
+    } else if (dist2sq < 0.1 * 0.1) {
+        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    } else {
+        gl_FragColor = vec4(0.5, 0.0, 0.0, 0.0);
+    }
+}
+</script>
+<script id="shader-fs-laplace" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+varying vec2 vTextureCoord;
+
+uniform highp sampler2D uSampler;
+uniform int uTexSize;
+
+void main(void)
+{
+    float delta = 1.0 / float(uTexSize);
+    vec4 c = texture2D(uSampler, vTextureCoord);
+    
+    if (c.a != 1.0 ) {
+		vec4 wc = texture2D(uSampler, vec2(vTextureCoord.s - delta, vTextureCoord.t));
+		vec4 ec = texture2D(uSampler, vec2(vTextureCoord.s + delta, vTextureCoord.t));
+		vec4 sc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t - delta));
+		vec4 nc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t + delta));
+        
+        float val = (wc.r + ec.r + nc.r + sc.r) / 4.0 +
+			(wc.g + ec.g + nc.g + sc.g) / (4.0 * 255.0);
+		float hi = val - mod(val, 1.0 / 255.0);
+		float lo = (val - hi) * 255.0;
+        gl_FragColor = vec4(hi, lo, 0.0, 0.0);
+    } else {
+        gl_FragColor = c;
+    }
+}
+</script>
+<script id="shader-fs-straight" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+varying vec2 vTextureCoord;
+
+uniform highp sampler2D uSampler;
+uniform int uTexSize;
+
+
+void main(void)
+{
+	vec4 src = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+	float brightness = src.r;
+	gl_FragColor = vec4(brightness, brightness, brightness, 1.0);
+}
+</script>
+<script id="shader-vs" type="x-shader/x-vertex">
+attribute vec3 aVertexPosition;
+attribute vec2 aTextureCoord;
+
+varying vec2 vTextureCoord;
+
+void main(void)
+{
+    gl_Position = vec4(aVertexPosition, 1.0);
+    vTextureCoord = aTextureCoord;
+}
+</script>
+<script type="text/javascript">
+var N = 512;
+
+var PROGS_DESC = {
+    'init': {
+        'vs': 'shader-vs',
+        'fs': 'shader-fs-init',
+        'attribs': ['aVertexPosition', 'aTextureCoord'],
+        'uniforms': []
+    },
+    'laplace': {
+        'vs': 'shader-vs',
+        'fs': 'shader-fs-laplace',
+        'attribs': ['aVertexPosition', 'aTextureCoord'],
+        'uniforms': ['uSampler', 'uTexSize']
+    },
+    'straight': {
+        'vs': 'shader-vs',
+        'fs': 'shader-fs-straight',
+        'attribs': ['aVertexPosition', 'aTextureCoord'],
+        'uniforms': ['uSampler', 'uTexSize']
+    }
+};
+
+var TEXTURES_DESC = {
+    'src': N,
+    'tgt': N
+};
+
+var BUFFERS_DESC = {
+    'quadVB': {
+        'type': 'v',
+        'data': [
+            -1.0, -1.0,  1.0,
+             1.0, -1.0,  1.0,
+             1.0,  1.0,  1.0,
+            -1.0,  1.0,  1.0
+        ]
+    },
+    'quadTB': {
+        'type': 't',
+        'data': [
+            0.0, 0.0,
+            1.0, 0.0,
+            1.0, 1.0,
+            0.0, 1.0
+        ]
+    },
+    'quadIB': {
+        'type': 'i',
+        'data': [0, 1, 2, 0, 2, 3]
+    }
+};
+
+var INIT_SEQ_DESC = {
+    'steps': [
+        ['src', [], 'init']
+    ],
+    'swaps': []
+};
+
+var STEP_SEQ_DESC = {
+    'steps': [
+        ['tgt', ['src'], 'laplace'],
+        [null, ['src'], 'straight']
+    ],
+    'swaps': [
+        ['src', 'tgt']
+    ]
+};
+
+var gl;
+function initGL(canvas) {
+    // requestAnimFrame with fallback
+    // http://paulirish.com/2011/requestanimationframe-for-smart-animating/
+    window.requestAnimFrame = (function(){
+          return  window.requestAnimationFrame       || 
+                  window.webkitRequestAnimationFrame || 
+                  window.mozRequestAnimationFrame    || 
+                  window.oRequestAnimationFrame      || 
+                  window.msRequestAnimationFrame     || 
+                  function(/* function */ callback, /* DOMElement */ element){
+                    window.setTimeout(callback, 1000 / 60);
+                  };
+        })();
+
+    gl = canvas.getContext("experimental-webgl");
+    gl.viewport(0, 0, canvas.width, canvas.height);
+}
+
+function getShader(id) {
+    var shaderElem = document.getElementById(id);
+    var shader;
+    
+    if (shaderElem.type === 'x-shader/x-fragment') {
+        shader = gl.createShader(gl.FRAGMENT_SHADER);
+    } else if (shaderElem.type === 'x-shader/x-vertex') {
+        shader = gl.createShader(gl.VERTEX_SHADER);
+    } else {
+        return null;
+    }
+
+    gl.shaderSource(shader, shaderElem.textContent);
+    gl.compileShader(shader);
+
+    return shader;
+}
+
+var progs = {};
+function initShaders() {
+    for (var id in PROGS_DESC) {
+        progs[id] = gl.createProgram();
+        gl.attachShader(progs[id], getShader(PROGS_DESC[id].vs));
+        gl.attachShader(progs[id], getShader(PROGS_DESC[id].fs));
+        gl.linkProgram(progs[id]);
+        
+        for (var i = 0; i < PROGS_DESC[id].attribs.length; i++) {
+            progs[id][PROGS_DESC[id].attribs[i]] = gl.getAttribLocation(progs[id], PROGS_DESC[id].attribs[i]);
+            gl.enableVertexAttribArray(progs[id][PROGS_DESC[id].attribs[i]]);
+        }
+        
+        for (var i = 0; i < PROGS_DESC[id].uniforms.length; i++) {
+            progs[id][PROGS_DESC[id].uniforms[i]] = gl.getUniformLocation(progs[id], PROGS_DESC[id].uniforms[i]);
+        }
+    }
+}
+
+var textures = {};
+var framebuffer;
+function initTexturesFramebuffer() {
+    for (var id in TEXTURES_DESC) {
+        var tex = gl.createTexture();
+        var n = TEXTURES_DESC[id];
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT );
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT );
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, n, n, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+        tex.n = n;
+        textures[id] = tex;
+    }
+    framebuffer = gl.createFramebuffer();
+}
+
+function createBuffer(desc) {
+    var glBufType = gl[{
+        'v': 'ARRAY_BUFFER',
+        't': 'ARRAY_BUFFER',
+        'i': 'ELEMENT_ARRAY_BUFFER'
+    }[desc.type]];
+    var glArrType = {
+        'v': Float32Array,
+        't': Float32Array,
+        'i': Uint16Array
+    }[desc.type];
+    var glItemSize = {
+        'v': 3,
+        't': 2,
+        'i': 1
+    }[desc.type];
+    
+    var buffer = gl.createBuffer();
+    gl.bindBuffer(glBufType, buffer);
+    gl.bufferData(glBufType, new glArrType(desc.data), gl.STATIC_DRAW);
+    gl.bindBuffer(glBufType, null);
+    
+    buffer.itemSize = glItemSize;
+    buffer.numItems = Math.floor(desc.data.length / glItemSize);
+    
+    return buffer;
+}
+
+var buffers = {};
+function initBuffers() {
+    for (var id in BUFFERS_DESC) {
+        buffers[id] = createBuffer(BUFFERS_DESC[id]);
+    }
+}
+
+function doRenderOp(tgtTexName, srcTexNames, progName) {
+    var prog = progs[progName];
+    gl.useProgram(prog);
+    
+    var tgtTex = null;
+    
+    if (tgtTexName !== null) {
+        tgtTex = textures[tgtTexName];
+        gl.uniform1i(prog.uTexSize, tgtTex.n);
+    } else {
+        gl.uniform1i(prog.uTexSize, 0);
+    }
+    
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffers.quadVB);
+    gl.vertexAttribPointer(prog.aVertexPosition, buffers.quadVB.itemSize, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffers.quadTB);
+    gl.vertexAttribPointer(prog.aTextureCoord, buffers.quadTB.itemSize, gl.FLOAT, false, 0, 0);
+    
+    for (var i = 0; i < srcTexNames.length; i++) {
+        gl.activeTexture(gl.TEXTURE0 + i);
+        gl.bindTexture(gl.TEXTURE_2D, textures[srcTexNames[i]]);
+        gl.uniform1i(prog.uSampler, i);
+    }
+    
+    if (tgtTexName !== null) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tgtTex, 0);
+    } else {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+    
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers.quadIB);
+    gl.drawElements(gl.TRIANGLES, buffers.quadIB.numItems, gl.UNSIGNED_SHORT, 0);
+}
+
+function doSeqAndSwap(desc) {
+    var steps = desc.steps;
+    var swaps = desc.swaps;
+    for (var i = 0; i < steps.length; i++) {
+        doRenderOp(steps[i][0], steps[i][1], steps[i][2]);
+    }
+    for (var i = 0; i < swaps.length; i++) {
+        var t = textures[swaps[i][0]];
+        textures[swaps[i][0]] = textures[swaps[i][1]];
+        textures[swaps[i][1]] = t;
+    }
+}
+
+function initState() {
+    doSeqAndSwap(INIT_SEQ_DESC);
+}
+
+function step() {
+    doSeqAndSwap(STEP_SEQ_DESC);
+    requestAnimFrame(step);
+}
+
+function webGLStart() {
+    var canvas = document.getElementById('main-canvas');
+    
+    initGL(canvas);
+    initShaders();
+    initBuffers();
+    initTexturesFramebuffer();
+    initState();
+    
+    step();
+}
+</script>
+</head>
+<body onload="webGLStart();">
+    <canvas id="main-canvas" style="border: none;" width="512" height="512"></canvas> <br>
+    <div style="width: 512px; text-align:right">
+        <p style="font-size:12px">Created by <a href="http://chouza.com.ar">Mariano M. Chouza</a>.</p>
+    </div>
+</body>
+</html>

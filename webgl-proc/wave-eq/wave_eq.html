@@ -45,6 +45,12 @@ OTHER DEALINGS IN THE SOFTWARE.
   // simulation mode controls description
   WAVE_EQ_APP.SIM_GUI_DESC = {};
   
+  // textures description
+  WAVE_EQ_APP.TEX_DESC = {
+    'state': {n: 512},
+    'newState': {n: 512}
+  };
+  
   // point radius
   WAVE_EQ_APP.LINE_WIDTH = 5;
   
@@ -67,12 +73,34 @@ OTHER DEALINGS IN THE SOFTWARE.
     this.mainCtx.stroke();
   };
   
+  // creates a texture dictionary from a description
+  WAVE_EQ_APP.createTexDictFromDesc = function(desc) {
+    var ret = {};
+    gl.activeTexture(gl.TEXTURE0);
+    for (var texName in desc) {
+      var tex = this.gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT );
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT );
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, n, n, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      ret[texName] = tex;
+    }
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    return ret;
+  };
+  
   // gets a texture from a given canvas
   WAVE_EQ_APP.texFromCanvas = function(canvas) {
     var gl = this.gl;
     var tex = gl.createTexture();
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT );
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
     gl.bindTexture(gl.TEXTURE_2D, null);
     return tex;
@@ -151,8 +179,11 @@ OTHER DEALINGS IN THE SOFTWARE.
     this.gl = newMainCanvas.getContext("experimental-webgl");
     this.gl.viewport(0, 0, newMainCanvas.width, newMainCanvas.height);
     
-    // gets the walls texture from the old canvas
-    var wallsTex = this.texFromCanvas(oldMainCanvas);
+    // creates the texture dictionary
+    var texDict = this.createTexDictFromDesc(this.TEX_DESC);
+    
+    // add the walls texture, obtained from the old canvas
+    texDict.walls = this.texFromCanvas(oldMainCanvas);
     
     // sets the simulation controls
     this.setControls(this.SIM_GUI);
