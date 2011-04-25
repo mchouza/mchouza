@@ -140,6 +140,10 @@ var PROGS_DESC = {
 };
 
 var TEXTURES_DESC = {
+    'tmp': N,
+    'rho': N,
+    'ux': N,
+    'uy': N,
     'src': N,
     'tgt': N
 };
@@ -208,7 +212,7 @@ function getShader(ids, type) {
         return null;
     }
     
-    if (!('push' in ids)) {
+    if (!ids.pop) {
         ids = [ids];
     }
     
