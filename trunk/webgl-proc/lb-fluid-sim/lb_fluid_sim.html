@@ -26,6 +26,34 @@ OTHER DEALINGS IN THE SOFTWARE.
 <html>
 <head>
 <title>Fluid simulation with WebGL</title>
+<script id="shader-fs-utils" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+// The numbers are encoded using 3 component of a color (RGB). When storing
+// 'x' in a component, the persisted value is 'round(x * 255.0) % 256' and 
+// the recovered value is obtained doing a floating point division by 255.
+// The encoding is a fixed point one, going from 0.000000 to 0.ffffff and 
+// storing each pair of hexadecimal digits in a color component.
+
+vec4 float2Color(float f)
+{
+    f *= 256.0;
+    float r = floor(f);
+    f -= r;
+    f *= 256.0;
+    float g = floor(f);
+    f -= g;
+    f *= 256.0;
+    float b = floor(f);
+    return vec4(r / 255.0, g / 255.0, b / 255.0, 1.0);
+}
+
+float color2Float(vec4 c)
+{
+    return c.r * 255.0 / 256.0 + c.g * 255.0 / (256.0 * 256.0) + c.b * 255.0 / (256.0 * 256.0 * 256.0);
+}
+</script>
 <script id="shader-fs-init" type="x-shader/x-fragment">
 precision highp float;
 precision highp int;
@@ -34,21 +62,10 @@ varying vec2 vTextureCoord;
 
 void main(void)
 {
-    vec2 d1 = vTextureCoord - vec2(0.25, 0.5);
-    vec2 d2 = vTextureCoord - vec2(0.75, 0.5);
-    float dist1sq = dot(d1, d1);
-    float dist2sq = dot(d2, d2);
-	
-    if (dist1sq < 0.1 * 0.1) {
-        gl_FragColor = vec4(1.0, 1.0, 0.0, 1.0);
-    } else if (dist2sq < 0.1 * 0.1) {
-        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-    } else {
-        gl_FragColor = vec4(0.5, 0.0, 0.0, 0.0);
-    }
+    gl_FragColor = float2Color(0.91234);
 }
 </script>
-<script id="shader-fs-laplace" type="x-shader/x-fragment">
+<script id="shader-fs-step" type="x-shader/x-fragment">
 precision highp float;
 precision highp int;
 
@@ -59,26 +76,19 @@ uniform int uTexSize;
 
 void main(void)
 {
-    float delta = 1.0 / float(uTexSize);
     vec4 c = texture2D(uSampler, vTextureCoord);
-    
-    if (c.a != 1.0 ) {
-		vec4 wc = texture2D(uSampler, vec2(vTextureCoord.s - delta, vTextureCoord.t));
-		vec4 ec = texture2D(uSampler, vec2(vTextureCoord.s + delta, vTextureCoord.t));
-		vec4 sc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t - delta));
-		vec4 nc = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t + delta));
-        
-        float val = (wc.r + ec.r + nc.r + sc.r) / 4.0 +
-			(wc.g + ec.g + nc.g + sc.g) / (4.0 * 255.0);
-		float hi = val - mod(val, 1.0 / 255.0);
-		float lo = (val - hi) * 255.0;
-        gl_FragColor = vec4(hi, lo, 0.0, 0.0);
-    } else {
-        gl_FragColor = c;
+    float f = color2Float(c);
+    if (abs(f - 0.91234) < 1e-6)
+    {
+        gl_FragColor = vec4(0.8, 0.0, 0.0, 1.0);
+    }
+    else
+    {
+        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
     }
 }
 </script>
-<script id="shader-fs-straight" type="x-shader/x-fragment">
+<script id="shader-fs-show" type="x-shader/x-fragment">
 precision highp float;
 precision highp int;
 
@@ -87,11 +97,9 @@ varying vec2 vTextureCoord;
 uniform highp sampler2D uSampler;
 uniform int uTexSize;
 
-
 void main(void)
 {
-	vec4 src = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
-	float brightness = src.r;
+	float brightness = texture2D(uSampler, vTextureCoord).r;
 	gl_FragColor = vec4(brightness, brightness, brightness, 1.0);
 }
 </script>
@@ -112,20 +120,20 @@ var N = 512;
 
 var PROGS_DESC = {
     'init': {
-        'vs': 'shader-vs',
-        'fs': 'shader-fs-init',
+        'vs': ['shader-vs'],
+        'fs': ['shader-fs-utils', 'shader-fs-init'],
         'attribs': ['aVertexPosition', 'aTextureCoord'],
         'uniforms': []
     },
-    'laplace': {
-        'vs': 'shader-vs',
-        'fs': 'shader-fs-laplace',
+    'step': {
+        'vs': ['shader-vs'],
+        'fs': ['shader-fs-utils', 'shader-fs-step'],
         'attribs': ['aVertexPosition', 'aTextureCoord'],
         'uniforms': ['uSampler', 'uTexSize']
     },
-    'straight': {
-        'vs': 'shader-vs',
-        'fs': 'shader-fs-straight',
+    'show': {
+        'vs': ['shader-vs'],
+        'fs': ['shader-fs-show'],
         'attribs': ['aVertexPosition', 'aTextureCoord'],
         'uniforms': ['uSampler', 'uTexSize']
     }
@@ -161,22 +169,15 @@ var BUFFERS_DESC = {
     }
 };
 
-var INIT_SEQ_DESC = {
-    'steps': [
-        ['src', [], 'init']
-    ],
-    'swaps': []
-};
+var INIT_SEQ_DESC = [
+    ['src', [], 'init']
+];
 
-var STEP_SEQ_DESC = {
-    'steps': [
-        ['tgt', ['src'], 'laplace'],
-        [null, ['src'], 'straight']
-    ],
-    'swaps': [
-        ['src', 'tgt']
-    ]
-};
+var STEP_SEQ_DESC = [
+    ['tgt', ['src'], 'step'],
+    [null, ['tgt'], 'show'],
+    ['src', 'tgt']
+];
 
 var gl;
 function initGL(canvas) {
@@ -197,19 +198,27 @@ function initGL(canvas) {
     gl.viewport(0, 0, canvas.width, canvas.height);
 }
 
-function getShader(id) {
-    var shaderElem = document.getElementById(id);
+function getShader(ids, type) {
     var shader;
-    
-    if (shaderElem.type === 'x-shader/x-fragment') {
+    if (type === 'fs') {
         shader = gl.createShader(gl.FRAGMENT_SHADER);
-    } else if (shaderElem.type === 'x-shader/x-vertex') {
+    } else if (type === 'vs') {
         shader = gl.createShader(gl.VERTEX_SHADER);
     } else {
         return null;
     }
-
-    gl.shaderSource(shader, shaderElem.textContent);
+    
+    if (!('push' in ids)) {
+        ids = [ids];
+    }
+    
+    var shaderTexts = [];
+    for (var i = 0; i < ids.length; i++) {
+        var shaderElem = document.getElementById(ids[i]);
+        shaderTexts.push(shaderElem.textContent);
+    }
+    
+    gl.shaderSource(shader, shaderTexts.join('\n'));
     gl.compileShader(shader);
 
     return shader;
@@ -219,8 +228,8 @@ var progs = {};
 function initShaders() {
     for (var id in PROGS_DESC) {
         progs[id] = gl.createProgram();
-        gl.attachShader(progs[id], getShader(PROGS_DESC[id].vs));
-        gl.attachShader(progs[id], getShader(PROGS_DESC[id].fs));
+        gl.attachShader(progs[id], getShader(PROGS_DESC[id].vs, 'vs'));
+        gl.attachShader(progs[id], getShader(PROGS_DESC[id].fs, 'fs'));
         gl.linkProgram(progs[id]);
         
         for (var i = 0; i < PROGS_DESC[id].attribs.length; i++) {
@@ -326,26 +335,25 @@ function doRenderOp(tgtTexName, srcTexNames, progName) {
     gl.drawElements(gl.TRIANGLES, buffers.quadIB.numItems, gl.UNSIGNED_SHORT, 0);
 }
 
-function doSeqAndSwap(desc) {
-    var steps = desc.steps;
-    var swaps = desc.swaps;
-    for (var i = 0; i < steps.length; i++) {
-        doRenderOp(steps[i][0], steps[i][1], steps[i][2]);
-    }
-    for (var i = 0; i < swaps.length; i++) {
-        var t = textures[swaps[i][0]];
-        textures[swaps[i][0]] = textures[swaps[i][1]];
-        textures[swaps[i][1]] = t;
+function doSeq(desc) {
+    for (var i = 0; i < desc.length; i++) {
+        if (desc[i].length === 3) {
+            doRenderOp(desc[i][0], desc[i][1], desc[i][2]);
+        } else if (desc[i].length === 2) {
+            var t = textures[desc[i][0]];
+            textures[desc[i][0]] = textures[desc[i][1]];
+            textures[desc[i][1]] = t;
+        }
     }
 }
 
 function initState() {
-    doSeqAndSwap(INIT_SEQ_DESC);
+    doSeq(INIT_SEQ_DESC);
 }
 
 function step() {
-    doSeqAndSwap(STEP_SEQ_DESC);
-    requestAnimFrame(step);
+    doSeq(STEP_SEQ_DESC);
+    //requestAnimFrame(step); FIXME: JUST FOR SINGLE STEP TESTING
 }
 
 function webGLStart() {
