@@ -53,6 +53,25 @@ float color2Float(vec4 c)
 {
     return c.r * 255.0 / 256.0 + c.g * 255.0 / (256.0 * 256.0) + c.b * 255.0 / (256.0 * 256.0 * 256.0);
 }
+
+float getFEq(float rho, vec2 u, int i)
+{
+    float dotProd = 0.0;
+    if ((i == 1) || (i == 2) || (i == 8))
+        dotProd += u.x;
+    else if ((i >= 4) && (i <= 6))
+        dotProd -= u.x;
+    if ((i >= 2) && (i <= 4))
+        dotProd += u.y;
+    else if (i >= 6)
+        dotProd -= u.y;
+    float scD;
+    if (i == 0)
+        scD = 4.0 / 9.0;
+    else
+        scD = 1.0 / (36.0 - 27.0 * mod(float(i), 2.0));
+    return scD * rho * (1.0 + 3.0 * dotProd + 4.5 * dotProd - 1.5 * dot(u, u));
+}
 </script>
 <script id="shader-fs-init" type="x-shader/x-fragment">
 precision highp float;
@@ -80,7 +99,7 @@ void main(void)
     float f = color2Float(c);
     if (abs(f - 0.91234) < 1e-6)
     {
-        gl_FragColor = vec4(0.8, 0.0, 0.0, 1.0);
+        gl_FragColor = vec4(0.5, 0.0, 0.0, 1.0);
     }
     else
     {
@@ -144,6 +163,7 @@ var TEXTURES_DESC = {
     'rho': N,
     'ux': N,
     'uy': N,
+    'f': [N, 9],
     'src': N,
     'tgt': N
 };
@@ -247,21 +267,31 @@ function initShaders() {
     }
 }
 
+function createTexture(n) {
+    var tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT );
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, n, n, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    tex.n = n;
+    return tex;
+}
+
 var textures = {};
 var framebuffer;
 function initTexturesFramebuffer() {
     for (var id in TEXTURES_DESC) {
-        var tex = gl.createTexture();
-        var n = TEXTURES_DESC[id];
-        gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT );
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT );
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, n, n, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-        gl.bindTexture(gl.TEXTURE_2D, null);
-        tex.n = n;
-        textures[id] = tex;
+        if (!TEXTURES_DESC[id].pop) {
+            textures[id] = createTexture(TEXTURES_DESC[id]);
+        } else {
+            textures[id] = [];
+            for (var i = 0; i < TEXTURES_DESC[id][1]; i++) {
+                textures[id].push(createTexture(TEXTURES_DESC[id][0]));
+            }
+        }
     }
     framebuffer = gl.createFramebuffer();
 }
