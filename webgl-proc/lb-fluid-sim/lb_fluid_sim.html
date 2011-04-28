@@ -30,6 +30,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 precision highp float;
 precision highp int;
 
+const float RHO_SCALE = 2.0;
+
 // The numbers are encoded using 3 component of a color (RGB). When storing
 // 'x' in a component, the persisted value is 'round(x * 255.0) % 256' and 
 // the recovered value is obtained doing a floating point division by 255.
@@ -73,15 +75,37 @@ float getFEq(float rho, vec2 u, int i)
     return scD * rho * (1.0 + 3.0 * dotProd + 4.5 * dotProd - 1.5 * dot(u, u));
 }
 </script>
-<script id="shader-fs-init" type="x-shader/x-fragment">
+<script id="shader-fs-init-f" type="x-shader/x-fragment">
 precision highp float;
 precision highp int;
+
+uniform int uI;
+uniform highp sampler2D uSampler0, uSampler1, uSampler2;
 
 varying vec2 vTextureCoord;
 
 void main(void)
 {
-    gl_FragColor = float2Color(0.91234);
+    float rho = color2Float(texture2D(uSampler0, vTextureCoord)) * RHO_SCALE;
+    float ux = color2Float(texture2D(uSampler1, vTextureCoord));
+    float uy = color2Float(texture2D(uSampler2, vTextureCoord));
+    
+    float fEq = getFEq(rho, vec2(ux, uy), i);
+
+    gl_FragColor = float2Color(fEq);
+}
+</script>
+<script id="shader-fs-init" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+uniform int uDenom;
+
+varying vec2 vTextureCoord;
+
+void main(void)
+{
+    gl_FragColor = float2Color(1.0 / float(uDenom));
 }
 </script>
 <script id="shader-fs-step" type="x-shader/x-fragment">
@@ -90,14 +114,14 @@ precision highp int;
 
 varying vec2 vTextureCoord;
 
-uniform highp sampler2D uSampler;
+uniform highp sampler2D uSampler0;
 uniform int uTexSize;
 
 void main(void)
 {
-    vec4 c = texture2D(uSampler, vTextureCoord);
+    vec4 c = texture2D(uSampler0, vTextureCoord);
     float f = color2Float(c);
-    if (abs(f - 0.91234) < 1e-6)
+    if (abs(f - 1.0 / 7.0) < 1e-6)
     {
         gl_FragColor = vec4(0.5, 0.0, 0.0, 1.0);
     }
@@ -113,12 +137,12 @@ precision highp int;
 
 varying vec2 vTextureCoord;
 
-uniform highp sampler2D uSampler;
+uniform highp sampler2D uSampler0;
 uniform int uTexSize;
 
 void main(void)
 {
-	float brightness = texture2D(uSampler, vTextureCoord).r;
+	float brightness = texture2D(uSampler0, vTextureCoord).r;
 	gl_FragColor = vec4(brightness, brightness, brightness, 1.0);
 }
 </script>
@@ -142,19 +166,19 @@ var PROGS_DESC = {
         'vs': ['shader-vs'],
         'fs': ['shader-fs-utils', 'shader-fs-init'],
         'attribs': ['aVertexPosition', 'aTextureCoord'],
-        'uniforms': []
+        'uniforms': ['uDenom']
     },
     'step': {
         'vs': ['shader-vs'],
         'fs': ['shader-fs-utils', 'shader-fs-step'],
         'attribs': ['aVertexPosition', 'aTextureCoord'],
-        'uniforms': ['uSampler', 'uTexSize']
+        'uniforms': ['uSampler0', 'uTexSize']
     },
     'show': {
         'vs': ['shader-vs'],
         'fs': ['shader-fs-show'],
         'attribs': ['aVertexPosition', 'aTextureCoord'],
-        'uniforms': ['uSampler', 'uTexSize']
+        'uniforms': ['uSampler0', 'uTexSize']
     }
 };
 
@@ -194,12 +218,12 @@ var BUFFERS_DESC = {
 };
 
 var INIT_SEQ_DESC = [
-    ['src', [], 'init']
+    ['src', [], 'init', {'uDenom': 7}]
 ];
 
 var STEP_SEQ_DESC = [
-    ['tgt', ['src'], 'step'],
-    [null, ['tgt'], 'show'],
+    ['tgt', ['src'], 'step', {}],
+    [null, ['tgt'], 'show', {}],
     ['src', 'tgt']
 ];
 
@@ -331,7 +355,7 @@ function initBuffers() {
     }
 }
 
-function doRenderOp(tgtTexName, srcTexNames, progName) {
+function doRenderOp(tgtTexName, srcTexNames, progName, uniformAssignments) {
     var prog = progs[progName];
     gl.useProgram(prog);
     
@@ -344,6 +368,10 @@ function doRenderOp(tgtTexName, srcTexNames, progName) {
         gl.uniform1i(prog.uTexSize, 0);
     }
     
+    for (var uniformVarName in uniformAssignments) {
+        gl.uniform1i(prog[uniformVarName], uniformAssignments[uniformVarName]);
+    }
+    
     gl.bindBuffer(gl.ARRAY_BUFFER, buffers.quadVB);
     gl.vertexAttribPointer(prog.aVertexPosition, buffers.quadVB.itemSize, gl.FLOAT, false, 0, 0);
 
@@ -353,7 +381,7 @@ function doRenderOp(tgtTexName, srcTexNames, progName) {
     for (var i = 0; i < srcTexNames.length; i++) {
         gl.activeTexture(gl.TEXTURE0 + i);
         gl.bindTexture(gl.TEXTURE_2D, textures[srcTexNames[i]]);
-        gl.uniform1i(prog.uSampler, i);
+        gl.uniform1i(prog['uSampler' + i], i);
     }
     
     if (tgtTexName !== null) {
@@ -371,8 +399,8 @@ function doRenderOp(tgtTexName, srcTexNames, progName) {
 
 function doSeq(desc) {
     for (var i = 0; i < desc.length; i++) {
-        if (desc[i].length === 3) {
-            doRenderOp(desc[i][0], desc[i][1], desc[i][2]);
+        if (desc[i].length === 4) {
+            doRenderOp(desc[i][0], desc[i][1], desc[i][2], desc[i][3]);
         } else if (desc[i].length === 2) {
             var t = textures[desc[i][0]];
             textures[desc[i][0]] = textures[desc[i][1]];
