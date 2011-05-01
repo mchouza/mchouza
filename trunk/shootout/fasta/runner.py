@@ -5,8 +5,8 @@ BLOCK_SIZE = 2 ** 16
 BASE_N = 1000
 BASE_FN = 'fasta-output.txt'
 
-#N_VALUES = (250000, 2500000, 25000000)
-N_VALUES = (250000, 2500000)
+N_VALUES = (250000, 2500000, 25000000)
+#N_VALUES = (250000, 2500000)
 
 def run_fasta_script(fn, n, output_fn):
     os.system('python %s %d >%s' % (fn, n, output_fn))
