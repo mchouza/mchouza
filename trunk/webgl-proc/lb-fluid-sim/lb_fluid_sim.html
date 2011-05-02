@@ -31,6 +31,8 @@ precision highp float;
 precision highp int;
 
 const float RHO_SCALE = 2.0;
+const float U_SCALE = 2.0;
+const float U_BIAS = 1.0;
 
 // The numbers are encoded using 3 component of a color (RGB). When storing
 // 'x' in a component, the persisted value is 'round(x * 255.0) % 256' and 
@@ -74,6 +76,26 @@ float getFEq(float rho, vec2 u, int i)
         scD = 1.0 / (36.0 - 27.0 * mod(float(i), 2.0));
     return scD * rho * (1.0 + 3.0 * dotProd + 4.5 * dotProd - 1.5 * dot(u, u));
 }
+
+vec4 rho2Color(float rho)
+{
+    return float2Color(rho / RHO_SCALE);
+}
+
+float color2Rho(vec4 c)
+{
+    return color2Float(c) * RHO_SCALE;
+}
+
+vec4 u2Color(float u)
+{
+    return float2Color((u + U_BIAS) / U_SCALE);
+}
+
+float color2U(vec4 c)
+{
+    return color2Float(c) * U_SCALE - U_BIAS;
+}
 </script>
 <script id="shader-fs-init-f" type="x-shader/x-fragment">
 precision highp float;
@@ -99,13 +121,30 @@ void main(void)
 precision highp float;
 precision highp int;
 
-uniform int uDenom;
+uniform int uRhoUxUy;
 
 varying vec2 vTextureCoord;
 
 void main(void)
 {
-    gl_FragColor = float2Color(1.0 / float(uDenom));
+    if (uRhoUxUy == 0)
+    {
+        gl_FragColor = rho2Color(1.0);
+    }
+    else if (uRhoUxUy == 1)
+    {
+        if (length(vTextureCoord - vec2(0.5, 0.5)) < 0.2)
+            gl_FragColor = u2Color(0.2);
+        else
+            gl_FragColor = u2Color(0.0);
+    }
+    else
+    {
+        if (length(vTextureCoord - vec2(0.5, 0.5)) < 0.2)
+            gl_FragColor = u2Color(-0.2);
+        else
+            gl_FragColor = u2Color(0.0);
+    }
 }
 </script>
 <script id="shader-fs-step" type="x-shader/x-fragment">
@@ -166,7 +205,13 @@ var PROGS_DESC = {
         'vs': ['shader-vs'],
         'fs': ['shader-fs-utils', 'shader-fs-init'],
         'attribs': ['aVertexPosition', 'aTextureCoord'],
-        'uniforms': ['uDenom']
+        'uniforms': ['uRhoUxUy']
+    },
+    'init-f': {
+        'vs': ['shader-vs'],
+        'fs': ['shader-fs-utils', 'shader-fs-init-f'],
+        'attribs': ['aVertexPosition', 'aTextureCoord'],
+        'uniforms': ['uSampler0', 'uSampler1', 'uSampler2', 'uI']
     },
     'step': {
         'vs': ['shader-vs'],
@@ -218,13 +263,13 @@ var BUFFERS_DESC = {
 };
 
 var INIT_SEQ_DESC = [
-    ['src', [], 'init', {'uDenom': 7}]
+    ['rho', [], 'init', {'uRhoUxUy': 0}],
+    ['ux', [], 'init', {'uRhoUxUy': 1}],
+    ['uy', [], 'init', {'uRhoUxUy': 2}]
 ];
 
 var STEP_SEQ_DESC = [
-    ['tgt', ['src'], 'step', {}],
-    [null, ['tgt'], 'show', {}],
-    ['src', 'tgt']
+    [null, ['ux'], 'show', {}]
 ];
 
 var gl;
