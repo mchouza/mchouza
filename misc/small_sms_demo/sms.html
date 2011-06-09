@@ -1,0 +1,195 @@
+<html>
+<head>
+    <script src="sylvester.js"></script>
+    <script>
+var K = 0.5;
+var R = 5;
+    
+function sms() {};
+
+sms.prototype = {
+    draw: function(ctx) {
+        ctx.strokeStyle = '#000';
+        ctx.beginPath();
+        for (var i = 0; i < this._fixedData.connections.length; i++) {
+            var startIdx = this._fixedData.connections[i][0];
+            var endIdx = this._fixedData.connections[i][1];
+            ctx.moveTo(this._state.e(4 * startIdx + 1), this._state.e(4 * startIdx + 2));
+            ctx.lineTo(this._state.e(4 * endIdx + 1), this._state.e(4 * endIdx + 2));
+        }
+        ctx.stroke();
+        if (this._fixedData.springyConnection) {
+            ctx.strokeStyle = '#f00';
+            ctx.beginPath();
+            var startIdx = this._fixedData.springyConnection[0];
+            var startPos = [this._state.e(4 * startIdx + 1), this._state.e(4 * startIdx + 2)];
+            var endPos = this._fixedData.springyConnection[1];
+            ctx.moveTo(startPos[0], startPos[1]);
+            ctx.lineTo(endPos[0], endPos[1]);
+            ctx.stroke();
+            ctx.strokeStyle = '#000';
+        }
+        ctx.fillStyle = '#000';
+        for (var i = 0; i < this._n; i++) {
+            ctx.beginPath();
+            ctx.arc(this._state.e(4 * i + 1), this._state.e(4 * i + 2), R, 0, 2 * Math.PI, true);
+            ctx.fill();
+        }
+    },
+    
+    loadData: function(masses, connections) {
+        this._n = masses.length;
+        this._state = [];
+        this._fixedData = {
+            masses: [],
+            connections: [],
+            springyConnection: null
+        };
+        for (var i = 0; i < this._n; i++) {
+            this._state[4 * i + 0] = masses[i][0];
+            this._state[4 * i + 1] = masses[i][1];
+            this._state[4 * i + 2] = 0;
+            this._state[4 * i + 3] = 0;
+            this._fixedData.masses[i] = masses[i][2];
+        }
+        for (var i = 0; i < connections.length; i++) {
+            this._fixedData.connections.push(connections[i]);
+        }
+        this._state = $V(this._state);
+        return this;
+    },
+    
+    getStateDot: function() {
+        var stateDot = [];
+        for (var i = 0; i < this._n; i++) {
+            stateDot[4 * i + 0] = this._state.e(4 * i + 3);
+            stateDot[4 * i + 1] = this._state.e(4 * i + 4);
+            stateDot[4 * i + 2] = -K * this._state.e(4 * i + 3);
+            stateDot[4 * i + 3] = -K * this._state.e(4 * i + 4);
+        }
+        for (var i = 0; i < this._fixedData.connections.length; i++) {
+            var s = this._fixedData.connections[i][0];
+            var e = this._fixedData.connections[i][1];
+            var k = this._fixedData.connections[i][2];
+            var l = this._fixedData.connections[i][3];
+            var r = $V([this._state.e(4 * e + 1), this._state.e(4 * e + 2)]).subtract($V([this._state.e(4 * s + 1), this._state.e(4 * s + 2)]));
+            var fa = -k * (r.modulus() - l);
+            var fv = r.toUnitVector().multiply(fa);
+            stateDot[4 * e + 2] += fv.e(1);
+            stateDot[4 * e + 3] += fv.e(2);
+            stateDot[4 * s + 2] -= fv.e(1);
+            stateDot[4 * s + 3] -= fv.e(2);
+        }
+        if (this._fixedData.springyConnection) {
+            var s = this._fixedData.springyConnection[0];
+            var k = this._fixedData.springyConnection[2];
+            var l = this._fixedData.springyConnection[3];
+            var r = $V(this._fixedData.springyConnection[1]).subtract($V([this._state.e(4 * s + 1), this._state.e(4 * s + 2)]));
+            var fa = -k * (r.modulus() - l);
+            var fv = r.toUnitVector().multiply(fa);
+            stateDot[4 * s + 2] -= fv.e(1);
+            stateDot[4 * s + 3] -= fv.e(2);
+        }
+        for (var i = 0; i < this._n; i++) {
+            stateDot[4 * i + 2] /= this._fixedData.masses[i];
+            stateDot[4 * i + 3] /= this._fixedData.masses[i];
+        }
+        return $V(stateDot);
+    },
+    
+    getMassUnder: function(pnt) {
+        var p = $V(pnt);
+        for (var i = 0; i < this._n; i++) {
+            var r = p.subtract($V([this._state.e(4 * i + 1), this._state.e(4 * i + 2)])).modulus();
+            if (r < R) {
+                return i;
+            }
+        }
+        return -1;
+    },
+    
+    setSpringyConnection: function(i, p, k, l) {
+        this._fixedData.springyConnection = [i, p, k, l];
+    },
+    
+    updateSpringyConnection: function(p) {
+        if (this._fixedData.springyConnection) {
+            this._fixedData.springyConnection[1] = p;
+        }
+    },
+    
+    clearSpringyConnection: function() {
+        this._fixedData.springyConnection = null;
+    }
+};
+
+sms.create = function(masses, connections) {
+    var s = new sms();
+    return s.loadData(masses, connections);
+};
+
+sms.makeGrid = function(x0, y0, m, n, dx, dy, mass, k) {
+    var masses = [];
+    var connections = [];
+    for (var i = 0; i < m; i++) {
+        for (var j = 0; j < n; j++) {
+            masses.push([x0 + j * dx, y0 + i * dy, mass]);
+        }
+    }
+    masses[0][0] -= dx / 2; // disturbance in the force
+    for (var i = 0; i < m; i++) {
+        for (var j = 0; j < n - 1; j++) {
+            connections.push([i * n + j, i * n + j + 1, k, dx]);
+        }
+    }
+    for (var i = 0; i < m - 1; i++) {
+        for (var j = 0; j < n; j++) {
+            connections.push([i * n + j, (i + 1) * n + j, k, dy]);
+        }
+    }
+    for (var i = 0; i < m - 1; i++) {
+        for (var j = 0; j < n - 1; j++) {
+            connections.push([i * n + j, (i + 1) * n + j + 1, k, Math.sqrt(dx * dx + dy * dy)]);
+        }
+    }
+    for (var i = 1; i < m; i++) {
+        for (var j = 0; j < n - 1; j++) {
+            connections.push([i * n + j, (i - 1) * n + j + 1, k, Math.sqrt(dx * dx + dy * dy)]);
+        }
+    }
+    return sms.create(masses, connections);
+};
+
+eulerStep = function(sys, dt) {
+    var stateDot = sys.getStateDot();
+    sys._state = sys._state.add(stateDot.x(dt));
+};
+    </script>
+</head>
+<body>
+    <canvas id="mainCanvas" width="512" height="512"></canvas>
+    <script>
+var mySMS = sms.makeGrid(20, 20, 7, 10, 20, 20, 1.0, 1.0);
+var canvas = document.getElementById('mainCanvas');
+var ctx = canvas.getContext('2d');
+
+canvas.onmousedown = function(e) {
+    var p = [e.clientX - canvas.offsetLeft, e.clientY - canvas.offsetTop];
+    var i = mySMS.getMassUnder(p);
+    if (i >= 0) {
+        mySMS.setSpringyConnection(i, p, 1.0, 0.0);
+    }
+};
+
+canvas.onmousemove = function(e) {
+    mySMS.updateSpringyConnection([e.clientX - canvas.offsetLeft, e.clientY - canvas.offsetTop]);
+};
+
+canvas.onmouseup = function(e) {
+    mySMS.clearSpringyConnection();
+};
+
+setInterval(function(){ctx.fillStyle = '#fff';ctx.fillRect(0, 0, 512, 512);mySMS.draw(ctx);eulerStep(mySMS, 40 / 1000);}, 40);
+    </script>
+</body>
+</html>
