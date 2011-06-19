@@ -1,6 +1,5 @@
 <html>
 <head>
-    <script src="sylvester.js"></script>
     <script>
 var K = 0.5;
 var R = 5;
@@ -14,15 +13,15 @@ sms.prototype = {
         for (var i = 0; i < this._fixedData.connections.length; i++) {
             var startIdx = this._fixedData.connections[i][0];
             var endIdx = this._fixedData.connections[i][1];
-            ctx.moveTo(this._state.e(4 * startIdx + 1), this._state.e(4 * startIdx + 2));
-            ctx.lineTo(this._state.e(4 * endIdx + 1), this._state.e(4 * endIdx + 2));
+            ctx.moveTo(this._state[4 * startIdx + 0], this._state[4 * startIdx + 1]);
+            ctx.lineTo(this._state[4 * endIdx + 0], this._state[4 * endIdx + 1]);
         }
         ctx.stroke();
         if (this._fixedData.springyConnection) {
             ctx.strokeStyle = '#f00';
             ctx.beginPath();
             var startIdx = this._fixedData.springyConnection[0];
-            var startPos = [this._state.e(4 * startIdx + 1), this._state.e(4 * startIdx + 2)];
+            var startPos = [this._state[4 * startIdx + 0], this._state[4 * startIdx + 1]];
             var endPos = this._fixedData.springyConnection[1];
             ctx.moveTo(startPos[0], startPos[1]);
             ctx.lineTo(endPos[0], endPos[1]);
@@ -32,7 +31,7 @@ sms.prototype = {
         ctx.fillStyle = '#000';
         for (var i = 0; i < this._n; i++) {
             ctx.beginPath();
-            ctx.arc(this._state.e(4 * i + 1), this._state.e(4 * i + 2), R, 0, 2 * Math.PI, true);
+            ctx.arc(this._state[4 * i + 0], this._state[4 * i + 1], R, 0, 2 * Math.PI, true);
             ctx.fill();
         }
     },
@@ -55,53 +54,55 @@ sms.prototype = {
         for (var i = 0; i < connections.length; i++) {
             this._fixedData.connections.push(connections[i]);
         }
-        this._state = $V(this._state);
         return this;
     },
     
     getStateDot: function() {
         var stateDot = [];
         for (var i = 0; i < this._n; i++) {
-            stateDot[4 * i + 0] = this._state.e(4 * i + 3);
-            stateDot[4 * i + 1] = this._state.e(4 * i + 4);
-            stateDot[4 * i + 2] = -K * this._state.e(4 * i + 3);
-            stateDot[4 * i + 3] = -K * this._state.e(4 * i + 4);
+            stateDot[4 * i + 0] = this._state[4 * i + 2]
+            stateDot[4 * i + 1] = this._state[4 * i + 3];
+            stateDot[4 * i + 2] = -K * stateDot[4 * i + 0];
+            stateDot[4 * i + 3] = -K * stateDot[4 * i + 1];
         }
         for (var i = 0; i < this._fixedData.connections.length; i++) {
             var s = this._fixedData.connections[i][0];
             var e = this._fixedData.connections[i][1];
             var k = this._fixedData.connections[i][2];
             var l = this._fixedData.connections[i][3];
-            var r = $V([this._state.e(4 * e + 1), this._state.e(4 * e + 2)]).subtract($V([this._state.e(4 * s + 1), this._state.e(4 * s + 2)]));
-            var fa = -k * (r.modulus() - l);
-            var fv = r.toUnitVector().multiply(fa);
-            stateDot[4 * e + 2] += fv.e(1);
-            stateDot[4 * e + 3] += fv.e(2);
-            stateDot[4 * s + 2] -= fv.e(1);
-            stateDot[4 * s + 3] -= fv.e(2);
+            var r = [this._state[4 * e + 0] - this._state[4 * s + 0], this._state[4 * e + 1] - this._state[4 * s + 1]];
+			var rm = Math.sqrt(r[0] * r[0] + r[1] * r[1]);
+            var fa = -k * (rm - l);
+            var fv = [r[0] * fa / rm, r[1] * fa / rm];
+            stateDot[4 * e + 2] += fv[0];
+            stateDot[4 * e + 3] += fv[1];
+            stateDot[4 * s + 2] -= fv[0];
+            stateDot[4 * s + 3] -= fv[1];
         }
         if (this._fixedData.springyConnection) {
             var s = this._fixedData.springyConnection[0];
             var k = this._fixedData.springyConnection[2];
             var l = this._fixedData.springyConnection[3];
-            var r = $V(this._fixedData.springyConnection[1]).subtract($V([this._state.e(4 * s + 1), this._state.e(4 * s + 2)]));
-            var fa = -k * (r.modulus() - l);
-            var fv = r.toUnitVector().multiply(fa);
-            stateDot[4 * s + 2] -= fv.e(1);
-            stateDot[4 * s + 3] -= fv.e(2);
+			var ev = this._fixedData.springyConnection[1];
+            var r = [ev[0] - this._state[4 * s + 0], ev[1] - this._state[4 * s + 1]];
+			var rm = Math.sqrt(r[0] * r[0] + r[1] * r[1]);
+            var fa = -k * (rm - l);
+            var fv = [r[0] * fa / rm, r[1] * fa / rm];
+            stateDot[4 * s + 2] -= fv[0];
+            stateDot[4 * s + 3] -= fv[1];
         }
         for (var i = 0; i < this._n; i++) {
             stateDot[4 * i + 2] /= this._fixedData.masses[i];
             stateDot[4 * i + 3] /= this._fixedData.masses[i];
         }
-        return $V(stateDot);
+        return stateDot;
     },
     
-    getMassUnder: function(pnt) {
-        var p = $V(pnt);
+    getMassUnder: function(p) {
         for (var i = 0; i < this._n; i++) {
-            var r = p.subtract($V([this._state.e(4 * i + 1), this._state.e(4 * i + 2)])).modulus();
-            if (r < R) {
+            var r = [p[0] - this._state[4 * i + 0], p[1] - this._state[4 * i + 1]];
+			var rm = Math.sqrt(r[0] * r[0] + r[1] * r[1]);
+            if (rm < R) {
                 return i;
             }
         }
@@ -162,7 +163,9 @@ sms.makeGrid = function(x0, y0, m, n, dx, dy, mass, k) {
 
 eulerStep = function(sys, dt) {
     var stateDot = sys.getStateDot();
-    sys._state = sys._state.add(stateDot.x(dt));
+	for (var i = 0; i < sys._state.length; i++) {
+		sys._state[i] += stateDot[i] * dt;
+	}
 };
     </script>
 </head>
