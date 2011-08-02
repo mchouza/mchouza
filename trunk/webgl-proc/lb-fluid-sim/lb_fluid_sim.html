@@ -30,6 +30,9 @@ OTHER DEALINGS IN THE SOFTWARE.
 precision highp float;
 precision highp int;
 
+const float OMEGA = 0.8;
+const float N = 512.0;
+
 const float RHO_SCALE = 2.0;
 const float U_SCALE = 2.0;
 const float U_BIAS = 1.0;
@@ -117,6 +120,40 @@ void main(void)
     gl_FragColor = float2Color(fEq);
 }
 </script>
+<script id="shader-fs-update-f" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+uniform int uI;
+uniform highp sampler2D uSampler0, uSampler1, uSampler2, uSampler3;
+
+varying vec2 vTextureCoord;
+
+void main(void)
+{
+    vec2 offset = vec2(0.0, 0.0);
+    
+    if ((uI == 1) || (uI == 2) || (uI == 8))
+        offset.x = -1.0 / N;
+    else if ((uI >= 4) && (uI <= 6))
+        offset.x = 1.0 / N;
+    if ((uI >= 2) && (uI <= 4))
+        offset.y = -1.0 / N;
+    else if (uI >= 6)
+        offset.y = 1.0 / N;
+
+    float rho = color2Rho(texture2D(uSampler0, vTextureCoord));
+    float ux = color2U(texture2D(uSampler1, vTextureCoord));
+    float uy = color2U(texture2D(uSampler2, vTextureCoord));
+    float f = color2Float(texture2D(uSampler3, vTextureCoord + offset));
+    
+    float fEq = getFEq(rho, vec2(ux, uy), uI);
+    
+    f = f * (1.0 - OMEGA) + fEq * OMEGA;
+
+    gl_FragColor = float2Color(f);
+}
+</script>
 <script id="shader-fs-init-accum" type="x-shader/x-fragment">
 precision highp float;
 precision highp int;
@@ -133,18 +170,16 @@ void main(void)
     }
     else if (uRhoUxUy == 1)
     {
-        if (length(vTextureCoord - vec2(0.5, 0.5)) < 0.2)
+        if (length(vTextureCoord - vec2(0.3, 0.6)) < 0.2)
             gl_FragColor = u2Color(0.2);
+        else if (length(vTextureCoord - vec2(0.7, 0.4)) < 0.2)
+            gl_FragColor = u2Color(-0.2);
         else
             gl_FragColor = u2Color(0.0);
     }
     else
     {
-    /*
-        if (length(vTextureCoord - vec2(0.5, 0.5)) < 0.2)
-            gl_FragColor = u2Color(-0.2);
-        else*/
-            gl_FragColor = u2Color(0.0);
+        gl_FragColor = u2Color(0.0);
     }
 }
 </script>
@@ -222,7 +257,6 @@ precision highp int;
 varying vec2 vTextureCoord;
 
 uniform highp sampler2D uSampler0;
-uniform int uTexSize;
 
 void main(void)
 {
@@ -258,6 +292,12 @@ var PROGS_DESC = {
         'attribs': ['aVertexPosition', 'aTextureCoord'],
         'uniforms': ['uSampler0', 'uSampler1', 'uSampler2', 'uI']
     },
+    'update-f': {
+        'vs': ['shader-vs'],
+        'fs': ['shader-fs-utils', 'shader-fs-update-f'],
+        'attribs': ['aVertexPosition', 'aTextureCoord'],
+        'uniforms': ['uSampler0', 'uSampler1', 'uSampler2', 'uSampler3', 'uI']
+    },
     'f-to-accum': {
         'vs': ['shader-vs'],
         'fs': ['shader-fs-utils', 'shader-fs-f-to-accum'],
@@ -279,7 +319,6 @@ var PROGS_DESC = {
 };
 
 var TEXTURES_DESC = {
-    'tmp': N,
     'rho': N,
     'ux': N,
     'uy': N,
@@ -292,8 +331,7 @@ var TEXTURES_DESC = {
     'f6': N,
     'f7': N,
     'f8': N,
-    'src': N,
-    'tgt': N
+    'newf': N
 };
 
 var BUFFERS_DESC = {
@@ -340,7 +378,25 @@ var STEP_SEQ_DESC = [
     ['rho', ['f0', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'], 'f-to-accum', {'uRhoUxUy': 0}],
     ['ux', ['f0', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'], 'f-to-accum', {'uRhoUxUy': 1}],
     ['uy', ['f0', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'], 'f-to-accum', {'uRhoUxUy': 2}],
-    [null, ['uy'], 'show', {}]
+    ['newf', ['rho', 'ux', 'uy', 'f0'], 'update-f', {'uI': 0}],
+    ['newf', 'f0'],
+    ['newf', ['rho', 'ux', 'uy', 'f1'], 'update-f', {'uI': 1}],
+    ['newf', 'f1'],
+    ['newf', ['rho', 'ux', 'uy', 'f2'], 'update-f', {'uI': 2}],
+    ['newf', 'f2'],
+    ['newf', ['rho', 'ux', 'uy', 'f3'], 'update-f', {'uI': 3}],
+    ['newf', 'f3'],
+    ['newf', ['rho', 'ux', 'uy', 'f4'], 'update-f', {'uI': 4}],
+    ['newf', 'f4'],
+    ['newf', ['rho', 'ux', 'uy', 'f5'], 'update-f', {'uI': 5}],
+    ['newf', 'f5'],
+    ['newf', ['rho', 'ux', 'uy', 'f6'], 'update-f', {'uI': 6}],
+    ['newf', 'f6'],
+    ['newf', ['rho', 'ux', 'uy', 'f7'], 'update-f', {'uI': 7}],
+    ['newf', 'f7'],
+    ['newf', ['rho', 'ux', 'uy', 'f8'], 'update-f', {'uI': 8}],
+    ['newf', 'f8'],
+    [null, ['ux'], 'show', {}]
 ];
 
 var gl;
@@ -515,7 +571,7 @@ function initState() {
 
 function step() {
     doSeq(STEP_SEQ_DESC);
-    //requestAnimFrame(step); FIXME: JUST FOR SINGLE STEP TESTING
+    requestAnimFrame(step);
 }
 
 function webGLStart() {
