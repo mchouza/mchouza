@@ -30,7 +30,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 precision highp float;
 precision highp int;
 
-const float OMEGA = 0.8;
+const float OMEGA = 1.8;
 const float N = 512.0;
 
 const float RHO_SCALE = 2.0;
@@ -124,8 +124,8 @@ void main(void)
 precision highp float;
 precision highp int;
 
-uniform int uI;
 uniform highp sampler2D uSampler0, uSampler1, uSampler2, uSampler3;
+uniform int uI;
 
 varying vec2 vTextureCoord;
 
@@ -142,9 +142,9 @@ void main(void)
     else if (uI >= 6)
         offset.y = 1.0 / N;
 
-    float rho = color2Rho(texture2D(uSampler0, vTextureCoord));
-    float ux = color2U(texture2D(uSampler1, vTextureCoord));
-    float uy = color2U(texture2D(uSampler2, vTextureCoord));
+    float rho = color2Rho(texture2D(uSampler0, vTextureCoord + offset));
+    float ux = color2U(texture2D(uSampler1, vTextureCoord + offset));
+    float uy = color2U(texture2D(uSampler2, vTextureCoord + offset));
     float f = color2Float(texture2D(uSampler3, vTextureCoord + offset));
     
     float fEq = getFEq(rho, vec2(ux, uy), uI);
@@ -171,11 +171,23 @@ void main(void)
     else if (uRhoUxUy == 1)
     {
         if (length(vTextureCoord - vec2(0.3, 0.6)) < 0.2)
-            gl_FragColor = u2Color(0.2);
+            gl_FragColor = u2Color(0.2 - length(vTextureCoord - vec2(0.3, 0.6)));
         else if (length(vTextureCoord - vec2(0.7, 0.4)) < 0.2)
-            gl_FragColor = u2Color(-0.2);
+            gl_FragColor = u2Color(-0.2 + length(vTextureCoord - vec2(0.7, 0.4)));
         else
             gl_FragColor = u2Color(0.0);
+        /*
+        if (vTextureCoord.x < 0.5)
+            gl_FragColor = u2Color(0.2);
+        else
+            gl_FragColor = u2Color(0.0);
+        */
+        /*
+        if (vTextureCoord.y < 0.5)
+            gl_FragColor = u2Color(0.2);
+        else
+            gl_FragColor = u2Color(0.0);
+        */
     }
     else
     {
@@ -232,10 +244,10 @@ uniform highp sampler2D uSampler0;
 
 void main(void)
 {
-    float f = color2U(texture2D(uSampler0, vTextureCoord));
+    float f = color2Float(texture2D(uSampler0, vTextureCoord));
     
-    float REFERENCE = 0.0;
-    float TOL = 1e-6;
+    float REFERENCE = 0.057;
+    float TOL = 1e-2;
     if (f < REFERENCE - TOL)
     {
         gl_FragColor = vec4(0.0, 0.0, 1.0, 1.0);
