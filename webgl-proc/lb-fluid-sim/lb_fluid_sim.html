@@ -32,6 +32,7 @@ precision highp int;
 
 const float OMEGA = 1.8;
 const float N = 512.0;
+const float PI = 3.1415926535897932384626433832795;
 
 const float RHO_SCALE = 2.0;
 const float U_SCALE = 2.0;
@@ -120,6 +121,32 @@ void main(void)
     gl_FragColor = float2Color(fEq);
 }
 </script>
+<script id="shader-fs-init-display" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+varying vec2 vTextureCoord;
+
+void main(void)
+{
+    float r = sin(12.0 * PI * vTextureCoord.x);
+    float g = sin(12.0 * PI * vTextureCoord.x + 2.0 / 3.0 * PI);
+    float b = sin(12.0 * PI * vTextureCoord.x + 4.0 / 3.0 * PI);
+
+    gl_FragColor = vec4(r, g, b, 1.0);
+}
+</script>
+<script id="shader-fs-init-display-o" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+varying vec2 vTextureCoord;
+
+void main(void)
+{
+    gl_FragColor = u2Color(0.0);
+}
+</script>
 <script id="shader-fs-update-f" type="x-shader/x-fragment">
 precision highp float;
 precision highp int;
@@ -154,6 +181,46 @@ void main(void)
     gl_FragColor = float2Color(f);
 }
 </script>
+<script id="shader-fs-update-display" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+uniform highp sampler2D uSampler0, uSampler1, uSampler2;
+
+varying vec2 vTextureCoord;
+
+void main(void)
+{
+    float ux = color2U(texture2D(uSampler1, vTextureCoord));
+    float uy = color2U(texture2D(uSampler2, vTextureCoord));
+    
+    vec2 offset = vec2(ux, uy);
+
+    gl_FragColor = texture2D(uSampler0, vTextureCoord - offset / N);
+}
+</script>
+<script id="shader-fs-update-display-o" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+uniform highp sampler2D uSampler0, uSampler1;
+
+varying vec2 vTextureCoord;
+
+void main(void)
+{
+    float o = color2U(texture2D(uSampler0, vTextureCoord));
+    float u = color2U(texture2D(uSampler1, vTextureCoord));
+    
+    o += u;
+    if (o < -1.0)
+        o += 1.0;
+    if (o > 1.0)
+        o -= 1.0;
+    
+    gl_FragColor = u2Color(o);
+}
+</script>
 <script id="shader-fs-init-accum" type="x-shader/x-fragment">
 precision highp float;
 precision highp int;
@@ -170,17 +237,22 @@ void main(void)
     }
     else if (uRhoUxUy == 1)
     {
+        
         if (length(vTextureCoord - vec2(0.3, 0.6)) < 0.2)
-            gl_FragColor = u2Color(0.2 - length(vTextureCoord - vec2(0.3, 0.6)));
+            gl_FragColor = u2Color(0.2);
         else if (length(vTextureCoord - vec2(0.7, 0.4)) < 0.2)
-            gl_FragColor = u2Color(-0.2 + length(vTextureCoord - vec2(0.7, 0.4)));
+            gl_FragColor = u2Color(-0.2);
         else
             gl_FragColor = u2Color(0.0);
+        
         /*
         if (vTextureCoord.x < 0.5)
-            gl_FragColor = u2Color(0.2);
+            gl_FragColor = u2Color(0.02);
         else
             gl_FragColor = u2Color(0.0);
+        */
+        /*
+        gl_FragColor = u2Color(0.2001);
         */
         /*
         if (vTextureCoord.y < 0.5)
@@ -244,10 +316,10 @@ uniform highp sampler2D uSampler0;
 
 void main(void)
 {
-    float f = color2Float(texture2D(uSampler0, vTextureCoord));
+    float f = color2U(texture2D(uSampler0, vTextureCoord));
     
-    float REFERENCE = 0.057;
-    float TOL = 1e-2;
+    float REFERENCE = 0.75;
+    float TOL = 0.24;
     if (f < REFERENCE - TOL)
     {
         gl_FragColor = vec4(0.0, 0.0, 1.0, 1.0);
@@ -272,8 +344,7 @@ uniform highp sampler2D uSampler0;
 
 void main(void)
 {
-	float brightness = texture2D(uSampler0, vTextureCoord).r;
-	gl_FragColor = vec4(brightness, brightness, brightness, 1.0);
+	gl_FragColor = texture2D(uSampler0, vTextureCoord);
 }
 </script>
 <script id="shader-vs" type="x-shader/x-vertex">
@@ -304,11 +375,35 @@ var PROGS_DESC = {
         'attribs': ['aVertexPosition', 'aTextureCoord'],
         'uniforms': ['uSampler0', 'uSampler1', 'uSampler2', 'uI']
     },
+    'init-display': {
+        'vs': ['shader-vs'],
+        'fs': ['shader-fs-utils', 'shader-fs-init-display'],
+        'attribs': ['aVertexPosition', 'aTextureCoord'],
+        'uniforms': []
+    },
+    'init-display-o': {
+        'vs': ['shader-vs'],
+        'fs': ['shader-fs-utils', 'shader-fs-init-display-o'],
+        'attribs': ['aVertexPosition', 'aTextureCoord'],
+        'uniforms': []
+    },
     'update-f': {
         'vs': ['shader-vs'],
         'fs': ['shader-fs-utils', 'shader-fs-update-f'],
         'attribs': ['aVertexPosition', 'aTextureCoord'],
         'uniforms': ['uSampler0', 'uSampler1', 'uSampler2', 'uSampler3', 'uI']
+    },
+    'update-display': {
+        'vs': ['shader-vs'],
+        'fs': ['shader-fs-utils', 'shader-fs-update-display'],
+        'attribs': ['aVertexPosition', 'aTextureCoord'],
+        'uniforms': ['uSampler0', 'uSampler1', 'uSampler2']
+    },
+    'update-display-o': {
+        'vs': ['shader-vs'],
+        'fs': ['shader-fs-utils', 'shader-fs-update-display-o'],
+        'attribs': ['aVertexPosition', 'aTextureCoord'],
+        'uniforms': ['uSampler0', 'uSampler1']
     },
     'f-to-accum': {
         'vs': ['shader-vs'],
@@ -342,8 +437,11 @@ var TEXTURES_DESC = {
     'f5': N,
     'f6': N,
     'f7': N,
-    'f8': N,
-    'newf': N
+    'f8': N,/*
+    'display': N,*/
+    'displayx': N,
+    'displayy': N,
+    'tmp': N
 };
 
 var BUFFERS_DESC = {
@@ -383,32 +481,41 @@ var INIT_SEQ_DESC = [
     ['f5', ['rho', 'ux', 'uy'], 'init-f', {'uI': 5}],
     ['f6', ['rho', 'ux', 'uy'], 'init-f', {'uI': 6}],
     ['f7', ['rho', 'ux', 'uy'], 'init-f', {'uI': 7}],
-    ['f8', ['rho', 'ux', 'uy'], 'init-f', {'uI': 8}]
+    ['f8', ['rho', 'ux', 'uy'], 'init-f', {'uI': 8}],
+    ['display', [], 'init-display', {}],
+    ['displayx', [], 'init-display-o', {}],
+    ['displayy', [], 'init-display-o', {}]
 ];
 
 var STEP_SEQ_DESC = [
     ['rho', ['f0', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'], 'f-to-accum', {'uRhoUxUy': 0}],
     ['ux', ['f0', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'], 'f-to-accum', {'uRhoUxUy': 1}],
     ['uy', ['f0', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'], 'f-to-accum', {'uRhoUxUy': 2}],
-    ['newf', ['rho', 'ux', 'uy', 'f0'], 'update-f', {'uI': 0}],
-    ['newf', 'f0'],
-    ['newf', ['rho', 'ux', 'uy', 'f1'], 'update-f', {'uI': 1}],
-    ['newf', 'f1'],
-    ['newf', ['rho', 'ux', 'uy', 'f2'], 'update-f', {'uI': 2}],
-    ['newf', 'f2'],
-    ['newf', ['rho', 'ux', 'uy', 'f3'], 'update-f', {'uI': 3}],
-    ['newf', 'f3'],
-    ['newf', ['rho', 'ux', 'uy', 'f4'], 'update-f', {'uI': 4}],
-    ['newf', 'f4'],
-    ['newf', ['rho', 'ux', 'uy', 'f5'], 'update-f', {'uI': 5}],
-    ['newf', 'f5'],
-    ['newf', ['rho', 'ux', 'uy', 'f6'], 'update-f', {'uI': 6}],
-    ['newf', 'f6'],
-    ['newf', ['rho', 'ux', 'uy', 'f7'], 'update-f', {'uI': 7}],
-    ['newf', 'f7'],
-    ['newf', ['rho', 'ux', 'uy', 'f8'], 'update-f', {'uI': 8}],
-    ['newf', 'f8'],
-    [null, ['ux'], 'show', {}]
+    ['tmp', ['rho', 'ux', 'uy', 'f0'], 'update-f', {'uI': 0}],
+    ['tmp', 'f0'],
+    ['tmp', ['rho', 'ux', 'uy', 'f1'], 'update-f', {'uI': 1}],
+    ['tmp', 'f1'],
+    ['tmp', ['rho', 'ux', 'uy', 'f2'], 'update-f', {'uI': 2}],
+    ['tmp', 'f2'],
+    ['tmp', ['rho', 'ux', 'uy', 'f3'], 'update-f', {'uI': 3}],
+    ['tmp', 'f3'],
+    ['tmp', ['rho', 'ux', 'uy', 'f4'], 'update-f', {'uI': 4}],
+    ['tmp', 'f4'],
+    ['tmp', ['rho', 'ux', 'uy', 'f5'], 'update-f', {'uI': 5}],
+    ['tmp', 'f5'],
+    ['tmp', ['rho', 'ux', 'uy', 'f6'], 'update-f', {'uI': 6}],
+    ['tmp', 'f6'],
+    ['tmp', ['rho', 'ux', 'uy', 'f7'], 'update-f', {'uI': 7}],
+    ['tmp', 'f7'],
+    ['tmp', ['rho', 'ux', 'uy', 'f8'], 'update-f', {'uI': 8}],
+    ['tmp', 'f8'],
+    ['tmp', ['display', 'ux', 'uy'], 'update-display', {}],
+    ['tmp', 'display'],/*
+    ['tmp', ['displayx', 'ux'], 'update-display-o', {}],
+    ['tmp', 'displayx'],
+    ['tmp', ['displayy', 'uy'], 'update-display-o', {}],
+    ['tmp', 'displayy'],*/
+    [null, ['display'], 'show', {}]
 ];
 
 var gl;
@@ -475,11 +582,16 @@ function initShaders() {
     }
 }
 
-function createTexture(n) {
+function createTexture(n, linear) {
     var tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    if (!linear) {
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    } else {
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    }
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT );
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT );
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, n, n, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
@@ -494,6 +606,7 @@ function initTexturesFramebuffer() {
     for (var id in TEXTURES_DESC) {
         textures[id] = createTexture(TEXTURES_DESC[id]);
     }
+    textures.display = createTexture(N, true);
     framebuffer = gl.createFramebuffer();
 }
 
