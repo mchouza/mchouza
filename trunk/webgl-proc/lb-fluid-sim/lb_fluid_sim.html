@@ -33,6 +33,7 @@ precision highp int;
 const float OMEGA = 1.9;
 const float N = 512.0;
 const float PI = 3.1415926535897932384626433832795;
+const float VEL = 0.15;
 
 const float RHO_SCALE = 2.0;
 const float U_SCALE = 2.0;
@@ -140,7 +141,7 @@ void main(void)
 precision highp float;
 precision highp int;
 
-uniform highp sampler2D uSampler0, uSampler1, uSampler2, uSampler3;
+uniform highp sampler2D uSampler0, uSampler1, uSampler2, uSampler3, uSampler4, uSampler5;
 uniform int uI;
 
 varying vec2 vTextureCoord;
@@ -161,15 +162,15 @@ void main(void)
     float rho = color2Rho(texture2D(uSampler0, vTextureCoord + offset));
     float ux = color2U(texture2D(uSampler1, vTextureCoord + offset));
     float uy = color2U(texture2D(uSampler2, vTextureCoord + offset));
-    float f = color2Float(texture2D(uSampler3, vTextureCoord + offset));
+    float f = color2Float(texture2D(uSampler3, vTextureCoord + offset)) * (1.0 - OMEGA) +
+        getFEq(rho, vec2(ux, uy), uI) * OMEGA;
+    float obst = texture2D(uSampler4, vTextureCoord + offset).r;
 
     if (vTextureCoord.x < 0.01)
-        f = getFEq(1.0, vec2(0.2, 0.0), uI);
-    else if (vTextureCoord.x > 0.19 && vTextureCoord.x < 0.21 && vTextureCoord.y > 0.49 && vTextureCoord.y < 0.51)
-        f = getFEq(rho, vec2(0.0, 0.0), uI);
-    else
-        f = f * (1.0 - OMEGA) + getFEq(rho, vec2(ux, uy), uI) * OMEGA;
-
+        f = getFEq(1.0, vec2(VEL, 0.0), uI);
+    if (obst != 0.0)
+        f = getFEq(1.0, vec2(0.0, 0.0), uI);
+        
     gl_FragColor = float2Color(f);
 }
 </script>
@@ -203,8 +204,26 @@ void main(void)
 {
     if (uRhoUxUy == 0)
         gl_FragColor = rho2Color(1.0);
+    else if (uRhoUxUy == 1)
+        gl_FragColor = u2Color(VEL);
     else
         gl_FragColor = u2Color(0.0);
+}
+</script>
+<script id="shader-fs-init-obst" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+varying vec2 vTextureCoord;
+
+void main(void)
+{
+    if (vTextureCoord.x > 0.19 && vTextureCoord.x < 0.31 && vTextureCoord.y + 0.2 * vTextureCoord.x > 0.49 && vTextureCoord.y + 0.2 * vTextureCoord.x < 0.51)
+        gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+    else if (vTextureCoord.x > 0.19 && vTextureCoord.x < 0.31 && vTextureCoord.y - 0.2 * vTextureCoord.x > 0.31 && vTextureCoord.y - 0.2 * vTextureCoord.x < 0.33)
+        gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+    else
+        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
 }
 </script>
 <script id="shader-fs-f-to-accum" type="x-shader/x-fragment">
@@ -287,15 +306,16 @@ precision highp int;
 
 varying vec2 vTextureCoord;
 
-uniform highp sampler2D uSampler0, uSampler1;
+uniform highp sampler2D uSampler0, uSampler1, uSampler2;
 
 void main(void)
 {
     float ux = color2U(texture2D(uSampler0, vTextureCoord));
     float uy = color2U(texture2D(uSampler1, vTextureCoord));
+    float obst = texture2D(uSampler2, vTextureCoord).r;
     float uMod = length(vec2(ux, uy));
 
-	gl_FragColor = vec4(uMod, uMod, uMod, 1.0);
+	gl_FragColor = vec4(obst * 0.4, uMod, uMod, 1.0);
 }
 </script>
 <script id="shader-vs" type="x-shader/x-vertex">
@@ -326,6 +346,12 @@ var PROGS_DESC = {
         'attribs': ['aVertexPosition', 'aTextureCoord'],
         'uniforms': ['uSampler0', 'uSampler1', 'uSampler2', 'uI']
     },
+    'init-obst': {
+        'vs': ['shader-vs'],
+        'fs': ['shader-fs-utils', 'shader-fs-init-obst'],
+        'attribs': ['aVertexPosition', 'aTextureCoord'],
+        'uniforms': []
+    },
     'init-display': {
         'vs': ['shader-vs'],
         'fs': ['shader-fs-utils', 'shader-fs-init-display'],
@@ -336,7 +362,7 @@ var PROGS_DESC = {
         'vs': ['shader-vs'],
         'fs': ['shader-fs-utils', 'shader-fs-update-f'],
         'attribs': ['aVertexPosition', 'aTextureCoord'],
-        'uniforms': ['uSampler0', 'uSampler1', 'uSampler2', 'uSampler3', 'uI']
+        'uniforms': ['uSampler0', 'uSampler1', 'uSampler2', 'uSampler3', 'uSampler4', 'uI']
     },
     'update-display': {
         'vs': ['shader-vs'],
@@ -366,7 +392,7 @@ var PROGS_DESC = {
         'vs': ['shader-vs'],
         'fs': ['shader-fs-utils', 'shader-fs-show-umod'],
         'attribs': ['aVertexPosition', 'aTextureCoord'],
-        'uniforms': ['uSampler0', 'uSampler1']
+        'uniforms': ['uSampler0', 'uSampler1', 'uSampler2']
     }
 };
 
@@ -383,7 +409,8 @@ var TEXTURES_DESC = {
     'f6': N,
     'f7': N,
     'f8': N,
-    'tmp': N
+    'tmp': N,
+    'obst': N
 };
 
 var BUFFERS_DESC = {
@@ -424,6 +451,7 @@ var INIT_SEQ_DESC = [
     ['f6', ['rho', 'ux', 'uy'], 'init-f', {'uI': 6}],
     ['f7', ['rho', 'ux', 'uy'], 'init-f', {'uI': 7}],
     ['f8', ['rho', 'ux', 'uy'], 'init-f', {'uI': 8}],
+    ['obst', [], 'init-obst', {}],
     ['display', [], 'init-display', {}]
 ];
 
@@ -431,25 +459,25 @@ var STEP_SEQ_DESC = [
     ['rho', ['f0', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'], 'f-to-accum', {'uRhoUxUy': 0}],
     ['ux', ['f0', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'], 'f-to-accum', {'uRhoUxUy': 1}],
     ['uy', ['f0', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'], 'f-to-accum', {'uRhoUxUy': 2}],
-    ['tmp', ['rho', 'ux', 'uy', 'f0'], 'update-f', {'uI': 0}],
+    ['tmp', ['rho', 'ux', 'uy', 'f0', 'obst', 'f0'], 'update-f', {'uI': 0}],
     ['tmp', 'f0'],
-    ['tmp', ['rho', 'ux', 'uy', 'f1'], 'update-f', {'uI': 1}],
+    ['tmp', ['rho', 'ux', 'uy', 'f1', 'obst', 'f5'], 'update-f', {'uI': 1}],
     ['tmp', 'f1'],
-    ['tmp', ['rho', 'ux', 'uy', 'f2'], 'update-f', {'uI': 2}],
+    ['tmp', ['rho', 'ux', 'uy', 'f2', 'obst', 'f6'], 'update-f', {'uI': 2}],
     ['tmp', 'f2'],
-    ['tmp', ['rho', 'ux', 'uy', 'f3'], 'update-f', {'uI': 3}],
+    ['tmp', ['rho', 'ux', 'uy', 'f3', 'obst', 'f7'], 'update-f', {'uI': 3}],
     ['tmp', 'f3'],
-    ['tmp', ['rho', 'ux', 'uy', 'f4'], 'update-f', {'uI': 4}],
+    ['tmp', ['rho', 'ux', 'uy', 'f4', 'obst', 'f8'], 'update-f', {'uI': 4}],
     ['tmp', 'f4'],
-    ['tmp', ['rho', 'ux', 'uy', 'f5'], 'update-f', {'uI': 5}],
+    ['tmp', ['rho', 'ux', 'uy', 'f5', 'obst', 'f1'], 'update-f', {'uI': 5}],
     ['tmp', 'f5'],
-    ['tmp', ['rho', 'ux', 'uy', 'f6'], 'update-f', {'uI': 6}],
+    ['tmp', ['rho', 'ux', 'uy', 'f6', 'obst', 'f2'], 'update-f', {'uI': 6}],
     ['tmp', 'f6'],
-    ['tmp', ['rho', 'ux', 'uy', 'f7'], 'update-f', {'uI': 7}],
+    ['tmp', ['rho', 'ux', 'uy', 'f7', 'obst', 'f3'], 'update-f', {'uI': 7}],
     ['tmp', 'f7'],
-    ['tmp', ['rho', 'ux', 'uy', 'f8'], 'update-f', {'uI': 8}],
+    ['tmp', ['rho', 'ux', 'uy', 'f8', 'obst', 'f4'], 'update-f', {'uI': 8}],
     ['tmp', 'f8'],
-    [null, ['ux', 'uy'], 'show-umod', {}]
+    [null, ['ux', 'uy', 'obst'], 'show-umod', {}]
 ];
 
 var gl;
