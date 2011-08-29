@@ -33,11 +33,13 @@ precision highp int;
 const float OMEGA = 1.9;
 const float N = 512.0;
 const float PI = 3.1415926535897932384626433832795;
-const float VEL = 0.15;
+const float VEL = 0.1;
 
 const float RHO_SCALE = 2.0;
 const float U_SCALE = 2.0;
 const float U_BIAS = 1.0;
+
+const float PEN_RADIUS = 0.01;
 
 // The numbers are encoded using 3 component of a color (RGB). When storing
 // 'x' in a component, the persisted value is 'round(x * 255.0) % 256' and 
@@ -172,6 +174,33 @@ void main(void)
         f = getFEq(1.0, vec2(0.0, 0.0), uI);
         
     gl_FragColor = float2Color(f);
+}
+</script>
+<script id="shader-fs-update-obst" type="x-shader/x-fragment">
+precision highp float;
+precision highp int;
+
+uniform highp sampler2D uSampler0;
+uniform int uPointX, uPointY;
+uniform int uClear;
+
+varying vec2 vTextureCoord;
+
+void main(void)
+{
+    vec4 baseColor = texture2D(uSampler0, vTextureCoord);
+    vec4 opColor;
+    vec2 point = vec2(float(uPointX), float(uPointY)) / N;
+    
+    if (uClear != 0)
+        opColor = vec4(0.0, 0.0, 0.0, 1.0);
+    else
+        opColor = vec4(1.0, 0.0, 0.0, 1.0);
+    
+    if ((length(point - vTextureCoord) < PEN_RADIUS) && (uPointX >= 0))
+        gl_FragColor = opColor;
+    else
+        gl_FragColor = baseColor;
 }
 </script>
 <script id="shader-fs-update-display" type="x-shader/x-fragment">
@@ -333,6 +362,9 @@ void main(void)
 <script type="text/javascript">
 var N = 512;
 
+var obstPoint = [-1, -1];
+var clear = false;
+
 var PROGS_DESC = {
     'init-accum': {
         'vs': ['shader-vs'],
@@ -369,6 +401,12 @@ var PROGS_DESC = {
         'fs': ['shader-fs-utils', 'shader-fs-update-display'],
         'attribs': ['aVertexPosition', 'aTextureCoord'],
         'uniforms': ['uSampler0', 'uSampler1', 'uSampler2']
+    },
+    'update-obst': {
+        'vs': ['shader-vs'],
+        'fs': ['shader-fs-utils', 'shader-fs-update-obst'],
+        'attribs': ['aVertexPosition', 'aTextureCoord'],
+        'uniforms': ['uSampler0', 'uPointX', 'uPointY', 'uClear']
     },
     'f-to-accum': {
         'vs': ['shader-vs'],
@@ -437,48 +475,6 @@ var BUFFERS_DESC = {
         'data': [0, 1, 2, 0, 2, 3]
     }
 };
-
-var INIT_SEQ_DESC = [
-    ['rho', [], 'init-accum', {'uRhoUxUy': 0}],
-    ['ux', [], 'init-accum', {'uRhoUxUy': 1}],
-    ['uy', [], 'init-accum', {'uRhoUxUy': 2}],
-    ['f0', ['rho', 'ux', 'uy'], 'init-f', {'uI': 0}],
-    ['f1', ['rho', 'ux', 'uy'], 'init-f', {'uI': 1}],
-    ['f2', ['rho', 'ux', 'uy'], 'init-f', {'uI': 2}],
-    ['f3', ['rho', 'ux', 'uy'], 'init-f', {'uI': 3}],
-    ['f4', ['rho', 'ux', 'uy'], 'init-f', {'uI': 4}],
-    ['f5', ['rho', 'ux', 'uy'], 'init-f', {'uI': 5}],
-    ['f6', ['rho', 'ux', 'uy'], 'init-f', {'uI': 6}],
-    ['f7', ['rho', 'ux', 'uy'], 'init-f', {'uI': 7}],
-    ['f8', ['rho', 'ux', 'uy'], 'init-f', {'uI': 8}],
-    ['obst', [], 'init-obst', {}],
-    ['display', [], 'init-display', {}]
-];
-
-var STEP_SEQ_DESC = [
-    ['rho', ['f0', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'], 'f-to-accum', {'uRhoUxUy': 0}],
-    ['ux', ['f0', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'], 'f-to-accum', {'uRhoUxUy': 1}],
-    ['uy', ['f0', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'], 'f-to-accum', {'uRhoUxUy': 2}],
-    ['tmp', ['rho', 'ux', 'uy', 'f0', 'obst', 'f0'], 'update-f', {'uI': 0}],
-    ['tmp', 'f0'],
-    ['tmp', ['rho', 'ux', 'uy', 'f1', 'obst', 'f5'], 'update-f', {'uI': 1}],
-    ['tmp', 'f1'],
-    ['tmp', ['rho', 'ux', 'uy', 'f2', 'obst', 'f6'], 'update-f', {'uI': 2}],
-    ['tmp', 'f2'],
-    ['tmp', ['rho', 'ux', 'uy', 'f3', 'obst', 'f7'], 'update-f', {'uI': 3}],
-    ['tmp', 'f3'],
-    ['tmp', ['rho', 'ux', 'uy', 'f4', 'obst', 'f8'], 'update-f', {'uI': 4}],
-    ['tmp', 'f4'],
-    ['tmp', ['rho', 'ux', 'uy', 'f5', 'obst', 'f1'], 'update-f', {'uI': 5}],
-    ['tmp', 'f5'],
-    ['tmp', ['rho', 'ux', 'uy', 'f6', 'obst', 'f2'], 'update-f', {'uI': 6}],
-    ['tmp', 'f6'],
-    ['tmp', ['rho', 'ux', 'uy', 'f7', 'obst', 'f3'], 'update-f', {'uI': 7}],
-    ['tmp', 'f7'],
-    ['tmp', ['rho', 'ux', 'uy', 'f8', 'obst', 'f4'], 'update-f', {'uI': 8}],
-    ['tmp', 'f8'],
-    [null, ['ux', 'uy', 'obst'], 'show-umod', {}]
-];
 
 var gl;
 function initGL(canvas) {
@@ -640,26 +636,61 @@ function doRenderOp(tgtTexName, srcTexNames, progName, uniformAssignments) {
     gl.drawElements(gl.TRIANGLES, buffers.quadIB.numItems, gl.UNSIGNED_SHORT, 0);
 }
 
-function doSeq(desc) {
-    for (var i = 0; i < desc.length; i++) {
-        if (desc[i].length === 4) {
-            doRenderOp(desc[i][0], desc[i][1], desc[i][2], desc[i][3]);
-        } else if (desc[i].length === 2) {
-            var t = textures[desc[i][0]];
-            textures[desc[i][0]] = textures[desc[i][1]];
-            textures[desc[i][1]] = t;
-        }
-    }
+function swapTextures(tex1Name, tex2Name) {
+    var t = textures[tex1Name];
+    textures[tex1Name] = textures[tex2Name];
+    textures[tex2Name] = t;
 }
 
 function initState() {
-    doSeq(INIT_SEQ_DESC);
+    doRenderOp('rho', [], 'init-accum', {'uRhoUxUy': 0});
+    doRenderOp('ux', [], 'init-accum', {'uRhoUxUy': 1});
+    doRenderOp('uy', [], 'init-accum', {'uRhoUxUy': 2});
+    doRenderOp('f0', ['rho', 'ux', 'uy'], 'init-f', {'uI': 0});
+    doRenderOp('f1', ['rho', 'ux', 'uy'], 'init-f', {'uI': 1});
+    doRenderOp('f2', ['rho', 'ux', 'uy'], 'init-f', {'uI': 2});
+    doRenderOp('f3', ['rho', 'ux', 'uy'], 'init-f', {'uI': 3});
+    doRenderOp('f4', ['rho', 'ux', 'uy'], 'init-f', {'uI': 4});
+    doRenderOp('f5', ['rho', 'ux', 'uy'], 'init-f', {'uI': 5});
+    doRenderOp('f6', ['rho', 'ux', 'uy'], 'init-f', {'uI': 6});
+    doRenderOp('f7', ['rho', 'ux', 'uy'], 'init-f', {'uI': 7});
+    doRenderOp('f8', ['rho', 'ux', 'uy'], 'init-f', {'uI': 8});
+    doRenderOp('obst', [], 'init-obst', {});
+    doRenderOp('display', [], 'init-display', {});
+}
+
+function stepState() {
+    doRenderOp('tmp', ['obst'], 'update-obst', {'uPointX': obstPoint[0], 'uPointY': obstPoint[1], 'uClear': clear ? 1 : 0});
+    swapTextures('tmp', 'obst');
+    doRenderOp('rho', ['f0', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'], 'f-to-accum', {'uRhoUxUy': 0});
+    doRenderOp('ux', ['f0', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'], 'f-to-accum', {'uRhoUxUy': 1});
+    doRenderOp('uy', ['f0', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'], 'f-to-accum', {'uRhoUxUy': 2});
+    doRenderOp('tmp', ['rho', 'ux', 'uy', 'f0', 'obst', 'f0'], 'update-f', {'uI': 0});
+    swapTextures('tmp', 'f0');
+    doRenderOp('tmp', ['rho', 'ux', 'uy', 'f1', 'obst', 'f5'], 'update-f', {'uI': 1});
+    swapTextures('tmp', 'f1');
+    doRenderOp('tmp', ['rho', 'ux', 'uy', 'f2', 'obst', 'f6'], 'update-f', {'uI': 2});
+    swapTextures('tmp', 'f2');
+    doRenderOp('tmp', ['rho', 'ux', 'uy', 'f3', 'obst', 'f7'], 'update-f', {'uI': 3});
+    swapTextures('tmp', 'f3');
+    doRenderOp('tmp', ['rho', 'ux', 'uy', 'f4', 'obst', 'f8'], 'update-f', {'uI': 4});
+    swapTextures('tmp', 'f4');
+    doRenderOp('tmp', ['rho', 'ux', 'uy', 'f5', 'obst', 'f1'], 'update-f', {'uI': 5});
+    swapTextures('tmp', 'f5');
+    doRenderOp('tmp', ['rho', 'ux', 'uy', 'f6', 'obst', 'f2'], 'update-f', {'uI': 6});
+    swapTextures('tmp', 'f6');
+    doRenderOp('tmp', ['rho', 'ux', 'uy', 'f7', 'obst', 'f3'], 'update-f', {'uI': 7});
+    swapTextures('tmp', 'f7');
+    doRenderOp('tmp', ['rho', 'ux', 'uy', 'f8', 'obst', 'f4'], 'update-f', {'uI': 8});
+    swapTextures('tmp', 'f8');
+    doRenderOp(null, ['ux', 'uy', 'obst'], 'show-umod', {});
+    //[null, ['obst'], 'show', {}]
 }
 
 var frameNum = 0;
 var frameNumStarted = new Date();
 function step() {
-    doSeq(STEP_SEQ_DESC);
+    stepState();
     
     // FPS
 	frameNum++;
@@ -673,8 +704,39 @@ function step() {
     requestAnimFrame(step);
 }
 
+
+function onMouseDown(e) {
+    
+}
+
+function onMouseUp(e) {
+    mouseDown = false;
+    obstPoint = [-1, -1];
+}
+
+function onMouseMove(e) {
+    if (mouseDown) {
+        obstPoint = [256, 256];
+    }
+}
+
 function webGLStart() {
     var canvas = document.getElementById('main-canvas');
+    var mouseDown = false;
+    canvas.onmousedown = function(e) {
+        mouseDown = true;
+    };
+    canvas.onmouseup = function(e) {
+        mouseDown = false;
+        obstPoint = [-1, -1];
+    };
+    canvas.onmousemove = function(e) {
+        if (mouseDown) {
+            e = e || window.event;
+            obstPoint = [e.clientX - canvas.offsetLeft, canvas.height - (e.clientY - canvas.offsetTop)];
+            clear = e.ctrlKey;
+        }
+    };
     
     initGL(canvas);
     initShaders();
