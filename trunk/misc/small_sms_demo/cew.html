@@ -1,0 +1,122 @@
+<html>
+<head>
+    <title>CEW</title>
+</head>
+<body>
+    <canvas id="mainCanvas" width="512" height="512"></canvas>
+    <script>
+var EPSILON = 0.000001;
+
+function vec3Cross(v1, v2) {
+    return [v1[1] * v2[2] - v1[2] * v2[1],
+            v1[2] * v2[0] - v1[0] * v2[2],
+            v1[0] * v2[1] - v1[1] * v2[0]];
+}
+
+function vec3Dot(v1, v2) {
+    return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
+}
+
+function vec3Sub(v1, v2) {
+    return [v1[0] - v2[0], v1[1] - v2[1], v1[2] - v2[2]];
+}
+
+// based on the algorithm described in "Fast, minimum storage ray-triangle 
+// intersection" by Tomas Möller and Ben Trumbore
+// http://www.graphics.cornell.edu/pubs/1997/MT97.html
+function lineTriIntTest(p0, p1, q0, q1, q2) {
+    // find direction vector
+    var d = vec3Sub(p1, p0);
+
+    // find vectors for two edges sharing q0
+    var e1 = vec3Sub(q1, q0);
+    var e2 = vec3Sub(q2, q0);
+
+    // begin calculating determinant - also used to calculate U parameter
+    var pv = vec3Cross(d, e2);
+
+    // if determinant is near zero, ray lies in plane of triangle
+    var det = vec3Dot(e1, pv);
+    if (det > -EPSILON && det < EPSILON) {
+        return null;
+    }
+    var invDet = 1.0 / det;
+
+    // calculate distance from q0 to p0
+    var tv = vec3Sub(p0, q0);
+
+    // calculate U parameter and test bounds
+    var u = vec3Dot(tv, pv) * invDet;
+    if (u < 0.0 || u > 1.0) {
+        return null;
+    }
+    
+    // prepare to test V parameter
+    var qv = vec3Cross(tv, e1);
+
+    // calculate V parameter and test bounds
+    var v = vec3Dot(d, qv) * invDet;
+    if (v < 0.0 || u + v > 1.0) {
+        return null;
+    }
+
+    // calculate t, ray intersects triangle and test bounds
+    var t = vec3Dot(e2, qv) * invDet;
+    if (t < 0.0 || t > 1.0) {
+        return null;
+    }
+
+    // return parameters
+    // p0 + t * (p1 - p0) = (1 - u - v) * q0 + u * q1 + v * q2
+    return [t, u, v];
+}
+
+// space-time intersection algorithm between a moving point, p0 -> p1, and a
+// moving line segment, (q0, r0) -> (q1, r1)
+// this algorithm approximates the spacetime surface swept by (q, r) by using
+// two triangles
+function pointSegSTIntercept(p0, p1, q0, r0, q1, r1) {
+    var stP0 = [p0[0], p0[1], 0.0];
+    var stP1 = [p1[0], p1[1], 1.0];
+    var stQ0 = [q0[0], q0[1], 0.0];
+    var stR0 = [r0[0], r0[1], 0.0];
+    var stQ1 = [q1[0], q1[1], 1.0];
+    var stR1 = [r1[0], r1[1], 1.0];
+    var i1 = lineTriIntTest(stP0, stP1, stQ0, stR0, stQ1);
+    var i2 = lineTriIntTest(stP0, stP1, stQ0, stQ1, stR1);
+    var t;
+    if (i1 && i2) {
+        t = Math.min(i1[0], i2[0]);
+    } else if (i1) {
+        t = i1[0];
+    } else if (i2) {
+        t = i2[0];
+    } else {
+        return null;
+    }
+    return [t, [p0[0] + t * (p1[0] - p0[0]), p0[1] + t * (p1[1] - p0[1])]];
+}
+
+SpringMassSystem = function() {
+};
+
+SpringMassSystem.prototype = {
+};
+
+var canvas = document.getElementById('mainCanvas');
+var ctx = canvas.getContext('2d');
+var sms = new SpringMassSystem();
+
+canvas.onmousedown = function(e) {
+};
+
+canvas.onmousemove = function(e) {
+};
+
+canvas.onmouseup = function(e) {
+};
+
+//setInterval(function(){ctx.fillStyle = '#fff';ctx.fillRect(0, 0, 512, 512);sms.draw(ctx);sms.step(40/1000);}, 40);
+    </script>
+</body>
+</html>
