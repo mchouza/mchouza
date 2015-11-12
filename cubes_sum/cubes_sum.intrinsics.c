@@ -21,7 +21,7 @@ int main(void)
             uint32_t rhs_ab = a * a * a + b * b * b;
             m128u_t rhs_ab_v = {.u = {rhs_ab, rhs_ab, rhs_ab, rhs_ab}};
             m128u_t c_v = {.u = {0, 1, 2, 3}};
-            m128u_t c_inc_v = {.u = {1, 1, 1, 1}};
+            m128u_t c_inc_v = {.u = {4, 4, 4, 4}};
             m128u_t lhs_v, rhs_v, cmp_v;
             for (int c = 0; c < 1000; c += 4)
             {
