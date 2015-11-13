@@ -1,8 +1,6 @@
-#include <emmintrin.h>
-#include <smmintrin.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <xmmintrin.h>
+#include <x86intrin.h>
 
 typedef union
 {
