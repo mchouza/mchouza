@@ -2,8 +2,10 @@ N = 10
 OMEGA = 1.0
 MAX_ITERS = 10000
 EPSILON = 1e-6
-K = 1.0
-G = 0.01
+# from http://www.matweb.com/search/datasheet_print.aspx?matguid=193434cf42e343fab880e1dabdb143ba
+# AISI 1045, in GPa
+K = 163.0
+G = 80.0
 MU = G
 LAMBDA = K - 2 * G / 3
 
