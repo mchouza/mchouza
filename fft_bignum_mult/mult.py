@@ -1,10 +1,12 @@
+import array
 import cmath
+import math
 import random
 import time
 
 
 MIN_BITS = 32 << 10
-MAX_BITS = 32 << 20
+MAX_BITS = 32 << 12
 
 
 def mult_base(a, b):
@@ -76,6 +78,21 @@ def fft(a):
             for j in range(n)]
 
 
+def complex_arr_mult(a, b):
+    """Multiplies two arrays of doubles 'a' and 'b' by interpreting them as
+    complex arrays."""
+
+    # checks lengths
+    n = len(a)
+    assert n == len(b)
+    assert n % 2 == 0
+
+    return array.array('d', (a[i] * b[i] - a[i + 1] * b[i + 1]
+                             if i % 2 == 0 else
+                             a[i - 1] * b[i] + a[i] * b[i - 1]
+                             for i in xrange(n)))
+
+
 def ifft(a):
     """Computes the inverse FFT of 'a'."""
 
@@ -97,6 +114,83 @@ def ifft(a):
     # just normalizes the result
     n = len(a)
     return [b_i / n for b_i in unnormalized_ifft(a)]
+
+
+def arr_fft(a):
+    """Computes the FFT of 'a' using arrays."""
+
+    # ensures the length is a power of 2
+    n = len(a) / 2
+    assert n & (n - 1) == 0
+
+    # base case
+    if n == 1:
+        return a
+
+    # gets the even and odd arrays
+    a_even = array.array('d', (a[i] for i in xrange(2 * n) if i % 4 < 2))
+    a_odd = array.array('d', (a[i] for i in xrange(2 * n) if i % 4 >= 2))
+
+    # computes their FFTs
+    a_fft_even = arr_fft(a_even)
+    a_fft_odd = arr_fft(a_odd)
+
+    # builds the twiddle array
+    twiddle = array.array('d', (math.cos(2.0 * (i / 2) * math.pi / n)
+                                if i % 2 == 0 else
+                                -math.sin(2.0 * (i / 2) * math.pi / n)
+                                for i in xrange(n)))
+
+    # twiddles the odd part
+    twiddled_a_fft_odd = complex_arr_mult(a_fft_odd, twiddle)
+
+    # builds the result
+    return array.array('d', (a_fft_even[i] + twiddled_a_fft_odd[i]
+                             for i in xrange(n))) +\
+           array.array('d', (a_fft_even[i] - twiddled_a_fft_odd[i]
+                             for i in xrange(n)))
+
+
+def arr_ifft(a):
+    """Computes the inverse FFT of 'a' using arrays."""
+
+    def unnormalized_arr_ifft(a):
+        """Computes the unnormalized version of 'arr_ifft'."""
+
+        # ensures the length is a power of 2
+        n = len(a) / 2
+        assert n & (n - 1) == 0
+
+        # base case
+        if n == 1:
+            return a
+
+        # gets the even and odd arrays
+        a_even = array.array('d', (a[i] for i in xrange(2 * n) if i % 4 < 2))
+        a_odd = array.array('d', (a[i] for i in xrange(2 * n) if i % 4 >= 2))
+
+        # computes their FFTs
+        a_fft_even = arr_fft(a_even)
+        a_fft_odd = arr_fft(a_odd)
+
+        # builds the twiddle array
+        twiddle = array.array('d', (math.cos(2.0 * (i / 2) * math.pi / n)
+                                    if i % 2 == 0 else
+                                    math.sin(2.0 * (i / 2) * math.pi / n)
+                                    for i in xrange(n)))
+
+        # twiddles the odd part
+        twiddled_a_fft_odd = complex_arr_mult(a_fft_odd, twiddle)
+
+        # builds the result
+        return array.array('d', (a_fft_even[i] + twiddled_a_fft_odd[i]
+                                 for i in xrange(n))) +\
+               array.array('d', (a_fft_even[i] - twiddled_a_fft_odd[i]
+                                 for i in xrange(n)))
+
+    # gets the unnormalized result and normalizes it
+    n = len(a) / 2
+    return array.array('d', (a_ifft_i / n for a_ifft_i in unnormalized_arr_ifft(a)))
 
 
 def get_byte_digits_array(a):
@@ -146,9 +240,11 @@ def mult_fft(a, b):
     # that's just a convolution and we can accelerate it with the FFT:
 
     ab_digits_fft = [a_digits_fft[i] * b_digits_fft[i] for i in xrange(n)]
+    print ab_digits_fft
 
     # now we recover the digits
     ab_digits_complex = ifft(ab_digits_fft)
+    print ab_digits_complex
     ab_digits = [int(round(abs(abcd))) for abcd in ab_digits_complex]
 
     # checks the maximum rounding error
@@ -167,6 +263,54 @@ def mult_fft(a, b):
     return int_from_byte_digits_array(ab_digits)
 
 
-if __name__ == '__main__':
+def mult_arr_fft(a, b):
+    """Computes the product of 'a' and 'b' by using the array FFT."""
 
-    print get_timings(MIN_BITS, MAX_BITS, (mult_base, mult_fft))
+    # converts them to digit arrays
+    a_digits = get_byte_digits_array(a)
+    b_digits = get_byte_digits_array(b)
+
+    # pads them to a power of two length beyond the one needed
+    # (because we don't want a circular convolution)
+    n = 1
+    while n < len(a_digits) or n < len(b_digits):
+        n *= 2
+    n *= 2
+    a_digits += [0] * (n - len(a_digits))
+    b_digits += [0] * (n - len(b_digits))
+
+    # builds the arrays
+    a_digits = array.array('d', (a_digits[i // 2] if i % 2 == 0 else 0.0
+                                 for i in xrange(2 * n)))
+    b_digits = array.array('d', (b_digits[i // 2] if i % 2 == 0 else 0.0
+                                 for i in xrange(2 * n)))
+
+    # computes the FFTs
+    a_digits_fft = arr_fft(a_digits)
+    b_digits_fft = arr_fft(b_digits)
+
+    # gets the convolution
+    ab_digits_fft = complex_arr_mult(a_digits_fft, b_digits_fft)
+    print ab_digits_fft    
+
+    # now we recover the digits
+    ab_digits_complex = arr_ifft(ab_digits_fft)
+    print ab_digits_complex
+    ab_digits = [int(round(ab_digits_complex[i])) for i in xrange(0, 2 * n, 2)]
+
+    # goes over the digits doing the carrying
+    carry = 0
+    for i in xrange(n):
+        carry += ab_digits[i]
+        ab_digits[i] = carry & 0xff
+        carry >>= 8
+    assert carry == 0
+
+    # returns the integer
+    return int_from_byte_digits_array(ab_digits)
+
+
+if __name__ == '__main__':
+    print get_timings(MIN_BITS, MAX_BITS, (mult_base, mult_arr_fft))
+    #print hex(mult_arr_fft(0x10000, 0x1111))
+    #print hex(mult_fft(0x10000, 0x1111))
