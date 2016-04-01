@@ -13,18 +13,25 @@ def mult_base(a, b):
     return a * b
 
 
-def get_timings(min_bits, max_bits, mult_func):
-    timings = []
-    random.seed(0)
-    num_bits = min_bits
-    while num_bits <= max_bits:
-        a = random.getrandbits(num_bits)
-        b = random.getrandbits(num_bits)
-        start = time.time()
-        c = mult_func(a, b)
-        dt = time.time() - start
-        timings.append((num_bits, dt))
-        num_bits *= 2
+def get_timings(min_bits, max_bits, mult_funcs):
+    timings = {}
+    results = []
+    for mf in mult_funcs:
+        random.seed(0)
+        timings[mf.__name__] = []
+        num_bits = min_bits
+        while num_bits <= max_bits:
+            a = random.getrandbits(num_bits)
+            b = random.getrandbits(num_bits)
+            start = time.time()
+            c = mf(a, b)
+            dt = time.time() - start
+            timings[mf.__name__].append((num_bits, dt))
+            if len(results) < len(timings[mf.__name__]):
+                results.append(c)
+            else:
+                assert c == results[len(timings[mf.__name__]) - 1]
+            num_bits *= 2
     return timings
 
 
@@ -92,19 +99,29 @@ def ifft(a):
     return [b_i / n for b_i in unnormalized_ifft(a)]
 
 
+def get_byte_digits_array(a):
+    """Given an integer 'a', returns the associated byte digits array."""
 
-def fft_mul(a, b):
+    a_hex = hex(a)[2:].rstrip('L')
+    num_digits = (len(a_hex) - 1) // 2 + 1
+    a_hex = '0' * (num_digits * 2 - len(a_hex)) + a_hex
+    return [int(a_hex[2 * (num_digits - i) - 2 : 2 * (num_digits - i)], 16) 
+            for i in xrange(num_digits)]
+
+
+def int_from_byte_digits_array(arr):
+    """Given a byte digits array 'arr', returns an integer."""
+
+    num_digits = len(arr)
+    return int(''.join('%02x' % arr[i] for i in range(num_digits - 1, -1, -1)), 16)
+
+
+def mult_fft(a, b):
     """Computes the product of 'a' and 'b' by using the FFT."""
 
     # converts them to digit arrays
-    # FIXME: USE hex() TO AVOID O(n^2) behavior
-    a_digits = []
-    b_digits = []
-    while a != 0 or b != 0:
-        a_digits.append(a & ((1 << 32) - 1))
-        b_digits.append(b & ((1 << 32) - 1))
-        a >>= 32
-        b >>= 32
+    a_digits = get_byte_digits_array(a)
+    b_digits = get_byte_digits_array(b)
 
     # pads them to a power of two length beyond the one needed
     # (because we don't want a circular convolution)
@@ -116,28 +133,40 @@ def fft_mul(a, b):
     b_digits += [0] * (n - len(b_digits))
 
     # we can express each value in terms of its digits as follows:
-    # a = a_0 * 2^{32 * 0} + a_1 * 2^{32 * 1} + ... + a_n * 2^{32 * n}
-    # b = b_0 * 2^{32 * 0} + b_1 * 2^{32 * 1} + ... + b_n * 2^{32 * n}
-    # then we have
-    # a * b = (a_0 * b_0) * 2^{32 * 0} + (a_0 * b_1 + a_1 * b_0) * 2^{32 * 1} + ... +
-    #         (a_n * b_n) * 2^{32 * (2 * n)}
-    # that's just a convolution and we can accelerate it with the FFT:
+    # a = a_0 * 2^{8 * 0} + a_1 * 2^{8 * 1} + ... + a_n * 2^{8 * n}
+    # b = b_0 * 2^{8 * 0} + b_1 * 2^{8 * 1} + ... + b_n * 2^{8 * n}
     # FIXME: EXPLAIN
 
     a_digits_fft = fft(a_digits)
     b_digits_fft = fft(b_digits)
 
-    # FIXME: FINISH IMPLEMENTATION
-    assert 0
+    # then we have
+    # a * b = (a_0 * b_0) * 2^{8 * 0} + (a_0 * b_1 + a_1 * b_0) * 2^{8 * 1} + ... +
+    #         (a_n * b_n) * 2^{8 * (2 * n)}
+    # that's just a convolution and we can accelerate it with the FFT:
+
+    ab_digits_fft = [a_digits_fft[i] * b_digits_fft[i] for i in xrange(n)]
+
+    # now we recover the digits
+    ab_digits_complex = ifft(ab_digits_fft)
+    ab_digits = [int(round(abs(abcd))) for abcd in ab_digits_complex]
+
+    # checks the maximum rounding error
+    assert max(abs(ab_digits_complex[i] - ab_digits[i]) for i in xrange(len(ab_digits))) < 0.1
+    #print n, max(abs(ab_digits_complex[i] - ab_digits[i]) for i in xrange(len(ab_digits)))
+
+    # goes over the digits doing the carrying
+    carry = 0
+    for i in xrange(n):
+        carry += ab_digits[i]
+        ab_digits[i] = carry & 0xff
+        carry >>= 8
+    assert carry == 0
+
+    # returns the integer
+    return int_from_byte_digits_array(ab_digits)
 
 
 if __name__ == '__main__':
 
-    # FIXME: DO A PROPER TIMING COMPARISON
-    #print ifft(fft(range(128)))
-    start = time.time()
-    fft([45 for _ in xrange(MAX_BITS / 32)])
-    print time.time() - start
-
-    #for nb, t in get_timings(MIN_BITS, MAX_BITS, mult_base):
-    #    print nb, t
+    print get_timings(MIN_BITS, MAX_BITS, (mult_base, mult_fft))
