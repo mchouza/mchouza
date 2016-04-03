@@ -1,6 +1,8 @@
 import array
 import cmath
+import gmpy2
 import math
+import numpy as np
 import random
 import time
 
@@ -147,6 +149,49 @@ def mult_fft(a, b):
     return int_from_byte_digits_array(ab_digits)
 
 
+def mult_np_fft(a, b):
+    """Computes the product of 'a' and 'b' by using the numpy FFT."""
+
+    a_digits = get_byte_digits_array(a)
+    b_digits = get_byte_digits_array(b)
+
+    n = 1
+    while n < len(a_digits) or n < len(b_digits):
+        n *= 2
+    n *= 2
+    a_digits += [0] * (n - len(a_digits))
+    b_digits += [0] * (n - len(b_digits))
+
+    a_digits_fft = np.fft.fft(a_digits)
+    b_digits_fft = np.fft.fft(b_digits)
+
+    ab_digits_fft = a_digits_fft * b_digits_fft
+
+    ab_digits_complex = np.fft.ifft(ab_digits_fft)
+    ab_digits = [int(round(abs(abcd))) for abcd in ab_digits_complex]
+
+    # checks the maximum rounding error
+    assert max(abs(ab_digits_complex[i] - ab_digits[i]) for i in xrange(len(ab_digits))) < 0.1
+    #print n, max(abs(ab_digits_complex[i] - ab_digits[i]) for i in xrange(len(ab_digits)))
+
+    # goes over the digits doing the carrying
+    carry = 0
+    for i in xrange(n):
+        carry += ab_digits[i]
+        ab_digits[i] = carry & 0xff
+        carry >>= 8
+    assert carry == 0
+
+    # returns the integer
+    return int_from_byte_digits_array(ab_digits)
+
+
+def mult_gmpy2(a, b):
+    """Computes the product of 'a' and 'b' by using gmpy2."""
+
+    return int(gmpy2.mul(a, b))
+
+
 def print_timings(min_bits, max_bits, mult_funcs):
     results = []
     for mf in mult_funcs:
@@ -169,4 +214,4 @@ def print_timings(min_bits, max_bits, mult_funcs):
 
 
 if __name__ == '__main__':
-    print_timings(MIN_BITS, MAX_BITS, (mult_base, mult_fft))
+    print_timings(MIN_BITS, MAX_BITS, (mult_base, mult_fft, mult_np_fft, mult_gmpy2))
