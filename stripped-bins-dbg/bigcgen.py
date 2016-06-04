@@ -1,6 +1,6 @@
 import sys
-print 'int main(void)\n{    unsigned x0 = 1234;\n'
+print 'int main(void)\n{\n    unsigned x0 = 1234;'
 for i in range(int(sys.argv[1])):
     j = i + 1
-    print '    unsigned x%(j)d = x%(i)d * %(i)d * %(j)d;' % locals()
-print '    return (int)x%(j)d;\n}\n' % locals()
+    print '    unsigned x%(j)d = x%(i)d * %(j)d * %(j)d;' % locals()
+print '    return (int)x%(j)d;\n}' % locals()
