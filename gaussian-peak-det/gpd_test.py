@@ -42,11 +42,29 @@ def naive_centroid(tv):
     return m / s
 
 
+def iterated_centroid(tv):
+    import math
+    def calc_centroid(emu, span):
+        m = 0
+        s = 0
+        for i in range(int(math.floor(emu - span)),
+                       int(math.ceil(emu + span))):
+            v = tv[i] * min(i + 1 - (emu - span), 1.0) *\
+                min((emu + span) - i, 1.0)
+            c = (min(emu + span, i + 1) + max(emu - span, i)) / 2.0
+            m += v * c
+            s += v
+        return m / s
+    emu = np.argmax(tv)
+    for i in xrange(10):
+        emu = calc_centroid(emu, 3.0)
+    return emu
+
 NUM_TESTS = 100
 
 TEST_GENS = (small_peaky_gn_gen, big_peaky_gn_gen)
 
-PEAK_DETECTORS = (crude_max, weighted_max, naive_centroid)
+PEAK_DETECTORS = (crude_max, weighted_max, naive_centroid, iterated_centroid)
 
 
 if __name__ == '__main__':
