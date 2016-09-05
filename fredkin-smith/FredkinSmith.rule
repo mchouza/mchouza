@@ -1,0 +1,87 @@
+@RULE FredkinSmith
+
+A 4-state CA created by Brian Silverman.  WireWorld models the flow of
+currents in wires and makes it relatively easy to build logic gates
+and other digital circuits.
+
+@TABLE
+
+# Golly rule-table format.
+# Each rule: C,N,NE,E,SE,S,SW,W,NW,C'
+#
+# Default for transitions not listed: no change
+#
+# Variables are bound within each transition. 
+# For example, if a={1,2} then 4,a,0->a represents
+# two transitions: 4,1,0->1 and 4,2,0->2
+# (This is why we need to repeat the variables below.
+#  In this case the method isn't really helping.)
+
+n_states:6
+neighborhood:vonNeumann
+symmetries:none
+
+var a = {0, 1, 2, 3, 4, 5}
+var b = {0, 1, 2, 3, 4, 5}
+var c = {0, 1, 2, 3, 4, 5}
+var d = {0, 1, 2, 3, 4, 5}
+
+var i = {0, 1}
+var j = {0, 1}
+var k = {0, 1}
+
+var n = {0, 2, 3, 4, 5}
+var p = {0, 2, 3, 4, 5}
+var q = {0, 2, 3, 4, 5}
+
+1,4,a,b,c,4
+1,a,5,b,c,5
+1,a,b,2,c,2
+1,a,b,c,3,3
+
+#2,1,a,b,c,1
+#2,n,a,b,c,4
+2,1,a,b,c,1
+2,n,1,a,b,3
+2,n,p,1,q,4
+2,n,p,a,1,5
+
+#3,a,1,b,c,1
+#3,a,n,b,c,5
+3,a,1,b,c,1
+3,1,n,a,b,2
+3,n,p,1,a,4
+3,n,p,q,1,5
+
+#4,a,b,1,c,1
+#4,a,b,n,c,2
+4,a,b,1,c,1
+4,a,1,n,b,3
+4,a,n,p,1,5
+4,1,n,p,q,2
+
+#5,a,b,c,1,1
+#5,a,b,c,n,3
+5,a,b,c,1,1
+5,1,a,b,n,2
+5,n,a,1,p,4
+5,n,1,p,q,3
+
+@NAMES
+
+0 empty
+1 path
+2 north-bound bar
+3 east-bound bar
+4 south-bound bar
+5 west-bound bar
+
+@COLORS
+
+0  48  48  48   dark gray
+1 128 128 128   light gray
+2 255 255 255   white
+3 255   0   0   red
+4   0 255   0   green
+5   0   0 255   blue
+
