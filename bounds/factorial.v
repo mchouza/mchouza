@@ -29,6 +29,48 @@ Proof.
   }
 Qed.
 
+Lemma n_sub_mod_is_div:
+  forall n d,
+  d <> 0 ->
+  (d | n - n mod d).
+Proof.
+  intros n d Hd_ne_0.
+  rewrite N.div_mod with (a := n) (b := d) at 1 by auto.
+  rewrite N.add_sub.
+  apply N.divide_factor_l.
+Qed.
+
+Lemma div_mult_compat:
+  forall a b m n,
+  (a | m) ->
+  (b | n) ->
+  (a * b | m * n).
+Proof.
+  intros a b m n.
+  unfold N.divide.
+  intros [r' Hm_div] [r'' Hn_div].
+  exists (r' * r'').
+  rewrite Hm_div, Hn_div.
+  rewrite <-N.mul_assoc with (n := r') (m := a).
+  rewrite N.mul_comm with (n := a) (m := r'' * b).
+  rewrite N.mul_comm with (n := a) (m := b).
+  repeat rewrite N.mul_assoc; auto.
+Qed.
+
+Lemma div_sub:
+  forall a b,
+  b <> 0 ->
+  b <= a ->
+  (a - b) / b = a/b - 1.
+Proof.
+  intros a b Hb_nz Hb_le_a.
+  SearchAbout (_ - _ = _).
+  apply eq_sym, N.add_sub_eq_r.
+  apply Nmult_reg_r with (p := b), Nplus_reg_l with (n := (a - b) mod b); auto.
+  rewrite N.add_comm, N.mul_comm, <-N.div_mod by auto.
+  rewrite N.mul_sub_distr_r, N.mul_1_l.
+  SearchAbout ((_-_)*_).
+
 Definition NFallPow x n :=
   N.recursion 1 (fun k r => r * (x - (n - k) + 1)) n.
 
@@ -56,6 +98,16 @@ Lemma fall_pow_2nd_0_eq_1:
 Proof.
   compute; auto.
 Qed.
+
+Lemma fall_pow_2nd_1_eq_1st:
+  forall n,
+  1 <= n ->
+  NFallPow n 1 = n.
+Proof.
+  intros.
+  rewrite N.one_succ; unfold NFallPow; rewrite N.recursion_succ by Morphisms.solve_proper.
+  rewrite N.recursion_0, <-N.one_succ, N.sub_0_r, N.sub_add, N.mul_1_l; auto.
+Qed.  
 
 Lemma fall_pow_join:
   forall n k d,
@@ -160,13 +212,77 @@ Proof.
   unfold NFact; intros; apply fall_pow_nz with (k := n).
 Qed.
 
+Lemma fall_pow_div_if_long:
+  forall n k d,
+  k <= n ->
+  0 < d <= k ->
+  (d | NFallPow n k).
+Proof.
+  intros n k d Hk_bound Hd_bound.
+  assert (d <> 0) as Hd_ne_0 by apply N.neq_sym, N.lt_neq, Hd_bound.
+  assert (1 <= k - n mod d) as Hksub_bound.
+  {
+    apply N.le_add_le_sub_r, N.lt_pred_le.
+    rewrite <-N.add_pred_l by discriminate; simpl.
+    apply N.lt_le_trans with (m := d).
+    + apply N.mod_lt; auto.
+    + apply Hd_bound.
+  }
+  assert (1 <= n - n mod d) as Hnsub_bound by
+    (apply N.le_trans with (m := k - n mod d); auto; apply N.sub_le_mono_r; auto).
+  rewrite <-N.sub_add with (m := n) (n := n mod d) by (apply N.mod_le; auto).
+  rewrite <-N.sub_add with (m := k) (n := n mod d) by
+    (apply N.lt_le_incl, N.lt_le_trans with (m := d); try apply N.mod_lt; auto; apply Hd_bound).
+  rewrite fall_pow_join.
+  rewrite N.sub_add by (apply N.mod_le; auto).
+  rewrite <-N.sub_add with (m := n - n mod d) (n := 1) by apply Hnsub_bound.
+  rewrite <-N.sub_add with (m := k - n mod d) (n := 1) by apply Hksub_bound.
+  rewrite fall_pow_join.
+  rewrite fall_pow_2nd_1_eq_1st by
+    (rewrite N.add_comm; apply N.le_add_r).
+  rewrite N.sub_add by apply Hnsub_bound.
+  rewrite N.mul_comm.
+  repeat apply N.divide_mul_l.
+  apply n_sub_mod_is_div; auto.
+Qed.
+
 Lemma div_fact:
   forall n k,
   k > 0 ->
   exists m,
   NFact n = m * k^(n / k).
 Proof.
-Admitted. (** FIXME: KEY LEMMA **)
+  intros n k Hk_bound.
+  exists (NFact n / k^(n / k)).
+  rewrite N.mul_comm.
+  assert (k <> 0) as Hk_ne_0 by apply N.neq_sym, N.lt_neq, N.gt_lt, Hk_bound.
+  assert (k ^ (n / k) <> 0) as Hpow_k_bound by 
+    (apply N.pow_nonzero; auto).
+  apply N.div_exact; auto.
+  apply N.mod_divide; auto.
+  remember (n / k) as q.
+  revert n Heqq Hpow_k_bound.
+  N.induct q.
+  + intros n _ _; rewrite N.pow_0_r; apply N.divide_1_l.
+  + unfold NFact; intros q Hind n' Hq_def Hk_pow_bound.
+    assert (k <= n') as Hk_le_n'.
+    {
+      apply N.div_str_pos_iff; auto.
+      rewrite <-Hq_def.
+      apply N.lt_0_succ.
+    }
+    rewrite N.pow_succ_r by apply N.le_0_l.
+    rewrite <-N.sub_add with (m := n') (n := k) by auto.
+    rewrite fall_pow_join, N.sub_add by auto.
+    apply div_mult_compat.
+    - apply fall_pow_div_if_long; auto.
+      split; try reflexivity.
+      apply N.gt_lt; auto.
+    - apply Hind.
+      SearchAbout ((_ - _) / _).
+      * admit.
+      * apply N.pow_nonzero, not_eq_sym, N.lt_neq, N.gt_lt, Hk_bound.
+Admitted.
 
 Lemma gcd_nz:
   forall a b,
