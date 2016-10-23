@@ -158,6 +158,20 @@ Proof.
   }
 Qed.
 
+Lemma fact_well_defined:
+  NFact 0 = 1 /\ (forall n, 1 <= n -> NFact n = n * NFact (n - 1)).
+Proof.
+  split.
+  + compute; auto.
+  + intros n Hn_bound.
+    unfold NFact.
+    assert (n = n - 1 + 1) as Hn_eq by
+      (rewrite N.sub_add; auto).
+    rewrite Hn_eq at 1 2.
+    rewrite fall_pow_join, fall_pow_2nd_1_eq_1st;
+      rewrite <-Hn_eq; auto.
+Qed.
+
 Lemma fall_pow_nz_normal:
   forall n k,
   k <= n ->
