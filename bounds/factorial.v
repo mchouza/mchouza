@@ -63,13 +63,22 @@ Lemma div_sub:
   b <= a ->
   (a - b) / b = a/b - 1.
 Proof.
-  intros a b Hb_nz Hb_le_a.
-  SearchAbout (_ - _ = _).
-  apply eq_sym, N.add_sub_eq_r.
-  apply Nmult_reg_r with (p := b), Nplus_reg_l with (n := (a - b) mod b); auto.
-  rewrite N.add_comm, N.mul_comm, <-N.div_mod by auto.
-  rewrite N.mul_sub_distr_r, N.mul_1_l.
-  SearchAbout ((_-_)*_).
+  intros a b Hb_ne_0 Hb_le_a.
+  rewrite N.div_mod with (a := a) (b := b) at 1 by auto.
+  rewrite <-N.mul_1_r with (n := b) at 4.
+  assert (b * 1 <= b * (a / b)) as Hmul_le.
+  {
+    apply N.mul_le_mono_nonneg_l.
+    + apply N.le_0_l.
+    + rewrite <-N.div_same with (a := b) by auto.
+      apply N.div_le_mono; auto.
+  }
+  rewrite N.add_sub_swap by apply Hmul_le.
+  rewrite <-N.mul_sub_distr_l, N.mul_comm with (n := b).
+  rewrite N.div_add_l by auto.
+  rewrite N.div_small with (a := a mod b) by (apply N.mod_lt; auto).
+  rewrite N.add_0_r; auto.
+Qed.
 
 Definition NFallPow x n :=
   N.recursion 1 (fun k r => r * (x - (n - k) + 1)) n.
@@ -256,8 +265,8 @@ Proof.
   exists (NFact n / k^(n / k)).
   rewrite N.mul_comm.
   assert (k <> 0) as Hk_ne_0 by apply N.neq_sym, N.lt_neq, N.gt_lt, Hk_bound.
-  assert (k ^ (n / k) <> 0) as Hpow_k_bound by 
-    (apply N.pow_nonzero; auto).
+  assert (forall r, k ^ r <> 0) as Hpow_k_bound by 
+    (intros; apply N.pow_nonzero; auto).
   apply N.div_exact; auto.
   apply N.mod_divide; auto.
   remember (n / k) as q.
@@ -278,11 +287,10 @@ Proof.
     - apply fall_pow_div_if_long; auto.
       split; try reflexivity.
       apply N.gt_lt; auto.
-    - apply Hind.
-      SearchAbout ((_ - _) / _).
-      * admit.
-      * apply N.pow_nonzero, not_eq_sym, N.lt_neq, N.gt_lt, Hk_bound.
-Admitted.
+    - apply Hind; auto.
+      rewrite div_sub, N.sub_1_r, <-Hq_def; auto.
+      rewrite N.pred_succ; auto.
+Qed.
 
 Lemma gcd_nz:
   forall a b,
