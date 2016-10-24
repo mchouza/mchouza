@@ -1,141 +1,90 @@
+Require Import List.
 Require Import Omega.
 
-Inductive MemoryPool : Set :=
-  | MPEnd : MemoryPool
-  | MPEmpty : MemoryPool -> MemoryPool
-  | MPFull : MemoryPool -> MemoryPool.
+Check count_occ.
 
-Function MP_len(p : MemoryPool) : nat :=
-  match p with
-  | MPEnd => 0
-  | MPEmpty tail => S (MP_len tail)
-  | MPFull tail => S (MP_len tail)
+Lemma count_occ_concat {A}:
+  forall (l l' : list A) (a : A) (eq_dec : forall (x y : A), {x = y} + {x <> y}),
+  count_occ eq_dec (l ++ l') a = count_occ eq_dec l a + count_occ eq_dec l' a.
+Proof.
+  intros l l' a eq_dec; induction l as [ | b l].
+  + simpl; auto.
+  + rewrite <-app_comm_cons; destruct (eq_dec b a).
+    - repeat rewrite count_occ_cons_eq by auto; omega.
+    - repeat rewrite count_occ_cons_neq by auto; omega.
+Qed.
+
+Definition MemoryPool := list bool.
+
+Definition mp_total_size (mp : MemoryPool) : nat := length mp.
+
+Definition mp_occupied_size (mp : MemoryPool) : nat := count_occ Bool.bool_dec mp true.
+
+Definition mp_free_size (mp : MemoryPool) : nat := count_occ Bool.bool_dec mp false.
+
+Fixpoint mp_constant_prefix_len (mp : MemoryPool) (a : bool) : nat :=
+  match mp, a with
+  | true :: rmp, true => S (mp_constant_prefix_len rmp a)
+  | false :: rmp, false => S (mp_constant_prefix_len rmp a)
+  | _, _ => 0
   end.
 
-Function MP_empty_prefix_len(p : MemoryPool) : nat :=
-  match p with 
-  | MPEmpty tail => S (MP_empty_prefix_len tail)
-  | _ => 0
-  end.
-
-Function MP_drop_first_n(p : MemoryPool) (n : nat) : MemoryPool :=
-  match n, p with
-  | 0, _ => p
-  | _, MPEnd => MPEnd
-  | S m, MPEmpty tail => MP_drop_first_n tail m
-  | S m, MPFull tail => MP_drop_first_n tail m
-  end.
-
-Function MP_prepend_n_elems(p : MemoryPool) (n : nat) (e : MemoryPool -> MemoryPool) : MemoryPool :=
+Fixpoint mp_create_uniform_pool (a : bool) (n : nat) : MemoryPool :=
   match n with
-  | 0 => p
-  | S m => e (MP_prepend_n_elems p m e)
+  | 0 => nil
+  | S m => a :: (mp_create_uniform_pool a m)
   end.
 
-Function MP_malloc(p : MemoryPool)( n : nat) : MemoryPool * nat :=
-  if le_dec n (MP_empty_prefix_len p) then
-    (MP_prepend_n_elems (MP_drop_first_n p n) n MPFull, 0)
-  else
-      match p with
-      | MPEnd => (MP_prepend_n_elems p n MPFull, 0)
-      | MPEmpty tail => let (q, i) := MP_malloc tail n in (MPEmpty q, S i)
-      | MPFull tail => let (q, i) := MP_malloc tail n in (MPFull q, S i)
-      end
-  .
-
-Function MP_count_full(p : MemoryPool) : nat :=
-  match p with
-  | MPEnd => 0
-  | MPEmpty tail => MP_count_full tail
-  | MPFull tail => S (MP_count_full tail)
+Fixpoint mp_add_constant_prefix (mp : MemoryPool) (n : nat) (a : bool) :=
+  match n with
+  | 0 => mp
+  | S m => a :: (mp_add_constant_prefix mp m a)
   end.
 
-Function MP_count_empty(p : MemoryPool) : nat :=
-  match p with
-  | MPEnd => 0
-  | MPEmpty tail => S (MP_count_empty tail)
-  | MPFull tail => MP_count_empty tail
-  end.
-
-Lemma ep_len_le_len :
-  forall p : MemoryPool,
-  MP_empty_prefix_len p <= MP_len p.
+Lemma no_lost_space: 
+  forall (mp : MemoryPool),
+  mp_total_size mp = mp_occupied_size mp + mp_free_size mp.
 Proof.
-  induction p; simpl; omega.
+  induction mp.
+  + compute; auto.
+  + destruct a; simpl; rewrite IHmp; unfold mp_free_size, mp_occupied_size; simpl; omega.
 Qed.
 
-Lemma empty_p_full_are_all :
-  forall p : MemoryPool,
-  MP_count_empty p + MP_count_full p = MP_len p.
+Lemma prefix_smaller_than_whole:
+  forall (mp : MemoryPool) (a : bool),
+  mp_constant_prefix_len mp a <= mp_total_size mp.
 Proof.
-  induction p; simpl; omega.
+  intros mp a; induction mp as [ | b mp].
+  + compute; auto.
+  + destruct a, b; simpl in *; omega.
 Qed.
 
-Lemma prepend_full_increases :
-  forall (p : MemoryPool) (n : nat),
-  MP_count_full (MP_prepend_n_elems p n MPFull) = MP_count_full p + n /\
-  MP_count_empty (MP_prepend_n_elems p n MPFull) = MP_count_empty p.
+Lemma uniform_pool_sizes:
+  forall (a : bool) (n : nat) (ump : MemoryPool),
+  ump = mp_create_uniform_pool a n ->
+  mp_total_size ump = n /\
+  count_occ Bool.bool_dec ump a = n /\
+  count_occ Bool.bool_dec ump (negb a) = 0 /\
+  mp_constant_prefix_len ump a = n /\
+  mp_constant_prefix_len ump (negb a) = 0.
 Proof.
-  induction n, p; simpl in *; try omega.
+  intros a n ump Hump_eq; rewrite Hump_eq; clear Hump_eq.
+  induction n.
+  + simpl; auto.
+  + destruct a; simpl in *; omega.
 Qed.
 
-Lemma drop_succ_first_empty :
-  forall (p : MemoryPool) (n : nat),
-  MP_drop_first_n (MPEmpty p) (S n) = MP_drop_first_n p n.
+Lemma add_constant_prefix_works:
+  forall (mp pmp : MemoryPool) (n : nat) (a : bool),
+  pmp = mp_add_constant_prefix mp n a ->
+  count_occ Bool.bool_dec pmp a = count_occ Bool.bool_dec mp a + n /\
+  count_occ Bool.bool_dec pmp (negb a) = count_occ Bool.bool_dec mp (negb a).
 Proof.
-  auto.
-Qed.
-
-Lemma drop_empty_prefix :
-  forall (p : MemoryPool) (n : nat),
-  n <= MP_empty_prefix_len p ->
-  MP_count_empty (MP_drop_first_n p n) + n = MP_count_empty p /\
-  MP_count_full (MP_drop_first_n p n) = MP_count_full p.
-Proof.
-  induction p; destruct n; simpl in *; try omega.
-  split; try apply IHp; try omega.
-  cut (MP_count_empty (MP_drop_first_n p n) + n = MP_count_empty p); try omega.
-  apply IHp; try omega.
-Qed.
-
-Lemma malloc_empty_beginning :
-  forall (p : MemoryPool) (n : nat),
-  n <= MP_empty_prefix_len p ->
-  MP_malloc p n = (MP_prepend_n_elems (MP_drop_first_n p n) n MPFull, 0).
-Proof.
-  intros; destruct p; simpl in *.
-  * case (le_dec n 0); tauto.
-  * case (le_dec n (S (MP_empty_prefix_len p))); tauto.
-  * case (le_dec n 0); tauto.
-Qed.
-
-Lemma malloc_increases_full :
-  forall (p : MemoryPool) (n : nat),
-  MP_count_full (fst (MP_malloc p n)) = MP_count_full p + n.
-Proof.
-  induction p.
-  {
-    assert (forall n, MP_count_full (MP_prepend_n_elems MPEnd n MPFull) = n) by apply prepend_full_increases.
-    intros; simpl; destruct (le_dec n 0), n; simpl; auto.
-  } 
-  {
-    intros; destruct (le_dec n (S (MP_empty_prefix_len p))).
-    * intros; rewrite malloc_empty_beginning by (simpl; auto); simpl.
-      destruct n.
-      + simpl; omega.
-      + cut (MP_count_full (MP_prepend_n_elems (MP_drop_first_n p n) (S n) MPFull) =
-             MP_count_full (MP_drop_first_n p n) + S n).
-        - intros Hcut; rewrite Hcut.
-          cut (MP_count_full (MP_drop_first_n p n) = MP_count_full p); try omega.
-          apply drop_empty_prefix; omega.
-        - apply prepend_full_increases.
-    * intros; simpl; destruct (le_dec n (S (MP_empty_prefix_len p))); try tauto.
-      rewrite surjective_pairing with (p := MP_malloc p n); simpl.
-      apply IHp.
-  }
-  {
-    intros; simpl; destruct (le_dec n 0), n; simpl; try omega.
-    rewrite surjective_pairing with (p := MP_malloc p (S n)); simpl.
-    apply f_equal, IHp.
-  }
+  intros mp pmp n a; revert pmp; induction n; intros pmp Hpmp_eq; rewrite Hpmp_eq.
+  + simpl; omega.
+  + assert (count_occ Bool.bool_dec (mp_add_constant_prefix mp n a) a =
+            count_occ Bool.bool_dec mp a + n) as IHn_match by (apply IHn; auto).
+    assert (count_occ Bool.bool_dec (mp_add_constant_prefix mp n a) (negb a) =
+            count_occ Bool.bool_dec mp (negb a)) as IHn_fail by (apply IHn; auto).
+    destruct a; simpl in *; rewrite IHn_match, Nat.add_succ_r, IHn_fail; auto.
 Qed.
