@@ -1,90 +1,242 @@
 Require Import List.
 Require Import Omega.
 
-Check count_occ.
+Section ListExtraProperties.
 
-Lemma count_occ_concat {A}:
-  forall (l l' : list A) (a : A) (eq_dec : forall (x y : A), {x = y} + {x <> y}),
-  count_occ eq_dec (l ++ l') a = count_occ eq_dec l a + count_occ eq_dec l' a.
-Proof.
-  intros l l' a eq_dec; induction l as [ | b l].
-  + simpl; auto.
-  + rewrite <-app_comm_cons; destruct (eq_dec b a).
-    - repeat rewrite count_occ_cons_eq by auto; omega.
-    - repeat rewrite count_occ_cons_neq by auto; omega.
-Qed.
+  Set Implicit Arguments.
 
-Definition MemoryPool := list bool.
+  Variable (A : Type).
 
-Definition mp_total_size (mp : MemoryPool) : nat := length mp.
+  Hypothesis eq_dec:
+    forall (x y : A), {x = y} + {x <> y}.
 
-Definition mp_occupied_size (mp : MemoryPool) : nat := count_occ Bool.bool_dec mp true.
+  Lemma firstn_short:
+    forall (l : list A) (n : nat),
+    length l <= n ->
+    firstn n l = l.
+  Proof.
+    induction l.
+    + destruct n; simpl; auto.
+    + destruct n; simpl; try omega; intros Hlen; rewrite IHl by omega; auto.
+  Qed.
 
-Definition mp_free_size (mp : MemoryPool) : nat := count_occ Bool.bool_dec mp false.
+  Lemma skipn_long:
+    forall (l : list A) (n : nat),
+    length l <= n ->
+    skipn n l = nil.
+  Proof.
+    induction l.
+    + destruct n; simpl; auto.
+    + destruct n; simpl; intros; try apply IHl; omega.
+  Qed.
 
-Fixpoint mp_constant_prefix_len (mp : MemoryPool) (a : bool) : nat :=
-  match mp, a with
-  | true :: rmp, true => S (mp_constant_prefix_len rmp a)
-  | false :: rmp, false => S (mp_constant_prefix_len rmp a)
-  | _, _ => 0
-  end.
+  Lemma app_firstn_1st:
+    forall (l l' : list A) (n : nat),
+    n <= length l ->
+    firstn n (l ++ l') = firstn n l.
+  Proof.
+    induction l; intros l' n Hn_bound; simpl in *.
+    + assert (n = 0) as Hn_eq_0 by omega; rewrite Hn_eq_0; simpl; auto.
+    + destruct n; simpl; auto; rewrite IHl by omega; auto.
+  Qed.
 
-Fixpoint mp_create_uniform_pool (a : bool) (n : nat) : MemoryPool :=
-  match n with
-  | 0 => nil
-  | S m => a :: (mp_create_uniform_pool a m)
-  end.
+  Lemma app_skipn_2nd:
+    forall (l l' : list A) (n : nat),
+    length l <= n ->
+    skipn n (l ++ l') = skipn (n - length l) l'.
+  Proof.
+    induction l; destruct n; simpl; auto; try omega.
+    intros; rewrite IHl by omega; auto.
+  Qed.
 
-Fixpoint mp_add_constant_prefix (mp : MemoryPool) (n : nat) (a : bool) :=
-  match n with
-  | 0 => mp
-  | S m => a :: (mp_add_constant_prefix mp m a)
-  end.
+  Lemma skipn_len:
+    forall (l : list A) (n : nat),
+    n <= length l ->
+    length (skipn n l) = length l - n.
+  Proof.
+    induction l.
+    + destruct n; simpl; auto.
+    + intros n IHn_bound; destruct n.
+      - simpl; auto.
+      - simpl in *; apply IHl; omega.
+  Qed.
 
-Lemma no_lost_space: 
-  forall (mp : MemoryPool),
-  mp_total_size mp = mp_occupied_size mp + mp_free_size mp.
-Proof.
-  induction mp.
-  + compute; auto.
-  + destruct a; simpl; rewrite IHmp; unfold mp_free_size, mp_occupied_size; simpl; omega.
-Qed.
+  Lemma count_occ_concat:
+    forall (l l' : list A) (a : A),
+    count_occ eq_dec (l ++ l') a = count_occ eq_dec l a + count_occ eq_dec l' a.
+  Proof.
+    intros l l' a; induction l as [ | b l].
+    + simpl; auto.
+    + rewrite <-app_comm_cons; destruct (eq_dec b a).
+      - repeat rewrite count_occ_cons_eq by auto; omega.
+      - repeat rewrite count_occ_cons_neq by auto; omega.
+  Qed.
 
-Lemma prefix_smaller_than_whole:
-  forall (mp : MemoryPool) (a : bool),
-  mp_constant_prefix_len mp a <= mp_total_size mp.
-Proof.
-  intros mp a; induction mp as [ | b mp].
-  + compute; auto.
-  + destruct a, b; simpl in *; omega.
-Qed.
+  Fixpoint count_not_occ (l : list A) (a : A) : nat :=
+    match l with
+    | b :: l' =>
+      let cnot := count_not_occ l' a in
+      if eq_dec a b then cnot else S cnot
+    | nil => 0
+    end.
 
-Lemma uniform_pool_sizes:
-  forall (a : bool) (n : nat) (ump : MemoryPool),
-  ump = mp_create_uniform_pool a n ->
-  mp_total_size ump = n /\
-  count_occ Bool.bool_dec ump a = n /\
-  count_occ Bool.bool_dec ump (negb a) = 0 /\
-  mp_constant_prefix_len ump a = n /\
-  mp_constant_prefix_len ump (negb a) = 0.
-Proof.
-  intros a n ump Hump_eq; rewrite Hump_eq; clear Hump_eq.
-  induction n.
-  + simpl; auto.
-  + destruct a; simpl in *; omega.
-Qed.
+  Lemma count_occ_not_occ_total:
+    forall (l : list A) (a : A),
+    count_occ eq_dec l a + count_not_occ l a = length l.
+  Proof.
+    intros l a; induction l as [ | b l'].
+    + simpl; auto.
+    + simpl; destruct (eq_dec b a), (eq_dec a b); simpl; try omega; exfalso; auto.
+  Qed.
 
-Lemma add_constant_prefix_works:
-  forall (mp pmp : MemoryPool) (n : nat) (a : bool),
-  pmp = mp_add_constant_prefix mp n a ->
-  count_occ Bool.bool_dec pmp a = count_occ Bool.bool_dec mp a + n /\
-  count_occ Bool.bool_dec pmp (negb a) = count_occ Bool.bool_dec mp (negb a).
-Proof.
-  intros mp pmp n a; revert pmp; induction n; intros pmp Hpmp_eq; rewrite Hpmp_eq.
-  + simpl; omega.
-  + assert (count_occ Bool.bool_dec (mp_add_constant_prefix mp n a) a =
-            count_occ Bool.bool_dec mp a + n) as IHn_match by (apply IHn; auto).
-    assert (count_occ Bool.bool_dec (mp_add_constant_prefix mp n a) (negb a) =
-            count_occ Bool.bool_dec mp (negb a)) as IHn_fail by (apply IHn; auto).
-    destruct a; simpl in *; rewrite IHn_match, Nat.add_succ_r, IHn_fail; auto.
-Qed.
+  Fixpoint uniform_list (a : A) (n : nat) : list A :=
+    match n with
+    | 0 => nil
+    | S m => a :: (uniform_list a m)
+    end.
+
+  Fixpoint uniform_prefix_len (l : list A) (a : A) : nat :=
+    match l with
+    | b :: l' =>
+      if eq_dec a b 
+      then S (uniform_prefix_len l' a)
+      else 0
+    | nil => 0
+    end.
+
+  Lemma uniform_list_len:
+    forall (a : A) (n : nat),
+    length (uniform_list a n) = n.
+  Proof.
+    intros a n; induction n; simpl; omega.
+  Qed.
+
+  Lemma uniform_prefix_len_bound:
+    forall (l : list A) (a : A),
+    uniform_prefix_len l a <= length l.
+  Proof.
+    intros l a; induction l as [ | b l']; simpl.
+    + omega.
+    + destruct (eq_dec a b); omega.
+  Qed.
+
+  Lemma count_occ_uniform_list:
+    forall (a b : A) (n : nat),
+    let ul := uniform_list a n in
+    count_occ eq_dec ul a = n /\
+    (a <> b -> count_occ eq_dec ul b = 0).
+  Proof.
+    intros a b n ul; subst ul; induction n.
+    + simpl; auto.
+    + split.
+      - simpl; destruct (eq_dec a a); try tauto; omega.
+      - intros Hineq; simpl; destruct (eq_dec a b); try tauto.
+  Qed.
+
+  Lemma uniform_prefix_can_be_taken:
+    forall (l : list A) (a : A),
+    let upl := (uniform_prefix_len l a) in
+    firstn upl l = uniform_list a upl.
+  Proof.
+    intros l a upl; subst upl; induction l as [ | b l'].
+    + simpl; auto.
+    + simpl; destruct (eq_dec a b); simpl; auto.
+      rewrite <-e; f_equal; auto.
+  Qed.
+
+End ListExtraProperties.
+
+Section MemPoolBasic.
+
+  Inductive MemCell :=
+    | FreeCell : MemCell
+    | OccupiedCell : MemCell.
+
+  Lemma eq_dec:
+    forall (mc mc' : MemCell),
+    {mc = mc'} + {mc <> mc'}.
+  Proof.
+    intros mc mc'; destruct mc, mc'; auto; right; discriminate.
+  Qed.
+
+  Definition MemPool := list MemCell.
+
+  Definition mp_count_all (mp : MemPool) : nat :=
+    length mp.
+
+  Definition mp_count_free (mp : MemPool) : nat :=
+    count_occ eq_dec mp FreeCell.
+
+  Definition mp_count_occupied (mp : MemPool) : nat :=
+    count_occ eq_dec mp OccupiedCell.
+
+  Definition mp_count_free_prefix (mp : MemPool) : nat :=
+    uniform_prefix_len eq_dec mp FreeCell.
+
+  Lemma all_cells_free_or_occupied:
+    forall (mp : MemPool),
+    mp_count_free mp = count_not_occ eq_dec mp OccupiedCell /\
+    mp_count_occupied mp = count_not_occ eq_dec mp FreeCell.
+  Proof.
+    induction mp as [| c mp [IHmp IHmp']].
+    + simpl; auto.
+    + split; unfold mp_count_free, mp_count_occupied in *; simpl; 
+        try rewrite IHmp; try rewrite IHmp'; simpl;
+        destruct (eq_dec c FreeCell), (eq_dec OccupiedCell c),
+                 (eq_dec c OccupiedCell), (eq_dec FreeCell c), c;
+        auto; try (exfalso; auto; discriminate).
+  Qed.
+
+End MemPoolBasic.
+
+Section MemPoolMallocFirstFit.
+
+  Fixpoint mp_malloc_first_fit_aux (mp : MemPool) (n o : nat) : nat * MemPool :=
+    if le_dec n (mp_count_free_prefix mp)
+    then (o, (uniform_list OccupiedCell n) ++ (skipn n mp))
+    else
+      if Nat.eq_dec (mp_count_free_prefix mp) (mp_count_all mp)
+      then (o, (uniform_list OccupiedCell n))
+      else
+        match mp with
+        | c :: rmp =>
+            let (no, nrmp) := mp_malloc_first_fit_aux rmp n (S o) in
+            (S no, c :: nrmp)
+        | _ =>
+            (0, nil) (* NOT REACHED *)
+        end.
+
+  Definition mp_malloc_first_fit (mp : MemPool) (n : nat) : nat * MemPool :=
+    mp_malloc_first_fit_aux mp n 0.
+
+  Lemma malloc_first_fit_works:
+    forall (mp : MemPool) (n : nat),
+    let (o, nmp) := mp_malloc_first_fit mp n in
+    firstn n (skipn o nmp) = uniform_list OccupiedCell n /\
+    firstn o nmp = firstn o mp /\
+    skipn (o + n) (firstn (length mp) nmp) = skipn (o + n) mp.
+  Proof.
+    intros mp n; unfold mp_malloc_first_fit; induction mp as [ | c rmp]; simpl.
+    {
+      unfold mp_count_free_prefix; destruct n; simpl; split; auto.
+      assert (length (uniform_list OccupiedCell n) = n) by apply uniform_list_len.
+      rewrite firstn_short by omega; auto.
+    }
+    {
+      destruct (le_dec n (mp_count_free_prefix (c :: rmp))); simpl;
+        assert (length (uniform_list OccupiedCell n) = n) by apply uniform_list_len.
+      + rewrite app_firstn_1st, firstn_short by omega.
+        destruct n; simpl.
+        - rewrite firstn_short by omega; auto.
+        - assert (mp_count_free_prefix (c :: rmp) <= length (c :: rmp)) by
+            apply uniform_prefix_len_bound.
+          assert (length (uniform_list OccupiedCell n ++ skipn n rmp) = length rmp)
+            by (rewrite app_length, uniform_list_len, skipn_len; simpl in *; omega).
+          assert (length (uniform_list OccupiedCell n) = n) by apply uniform_list_len.
+          rewrite firstn_short, app_skipn_2nd by omega.
+          rewrite uniform_list_len, Nat.sub_diag; simpl; auto.
+      + admit.
+    }
+  Admitted.
+
+End MemPoolMallocFirstFit.
