@@ -40,6 +40,16 @@ Section ListExtraProperties.
     + destruct n; simpl; auto; rewrite IHl by omega; auto.
   Qed.
 
+  Lemma app_firstn_2nd:
+    forall (l l' : list A) (n : nat),
+    length l <= n ->
+    firstn n (l ++ l') = l ++ (firstn (n - length l) l').
+  Proof.
+    induction l; intros l' n Hn_bound; simpl in *.
+    + assert (n - 0 = n) as Hn_minus_0 by omega; rewrite Hn_minus_0; simpl; auto.
+    + destruct n; simpl; try omega; rewrite IHl by omega; auto.
+  Qed.
+
   Lemma app_skipn_2nd:
     forall (l l' : list A) (n : nat),
     length l <= n ->
@@ -200,14 +210,124 @@ Section MemPoolMallocFirstFit.
       else
         match mp with
         | c :: rmp =>
-            let (no, nrmp) := mp_malloc_first_fit_aux rmp n (S o) in
+            let (no, nrmp) := mp_malloc_first_fit_aux rmp n o in
             (S no, c :: nrmp)
-        | _ =>
-            (0, nil) (* NOT REACHED *)
+        | nil =>
+            (o, nil) (* NOT REACHED *)
         end.
 
   Definition mp_malloc_first_fit (mp : MemPool) (n : nat) : nat * MemPool :=
     mp_malloc_first_fit_aux mp n 0.
+
+  Lemma offset_bigger_than_base:
+    forall (mp : MemPool) (n bo : nat),
+    let (o, nmp) := mp_malloc_first_fit_aux mp n bo in
+    bo <= o.
+  Proof.
+    induction mp as [ | c rmp]; simpl.
+    + intros; destruct (le_dec _ _); auto.
+    + intros; destruct (le_dec _ _); simpl; auto.
+      destruct (Nat.eq_dec _ _); simpl; auto.
+      specialize (IHrmp n bo).
+      remember (mp_malloc_first_fit_aux _ _ _) as malloc_rec.
+      destruct malloc_rec as (o, nrmp).
+      omega.
+  Qed.
+
+  Lemma mffaw_fits_beginning:
+    forall (rmp : MemPool) (c : MemCell) (n : nat),
+    firstn n (skipn 0 (uniform_list OccupiedCell n ++ skipn n (c :: rmp))) =
+    uniform_list OccupiedCell n /\
+    firstn 0 (uniform_list OccupiedCell n ++ skipn n (c :: rmp)) = firstn 0 (c :: rmp) /\
+    skipn n (firstn (length (c :: rmp)) (uniform_list OccupiedCell n ++ skipn n (c :: rmp))) =
+    skipn n (c :: rmp).
+  Proof.
+    intros; simpl.
+    assert (length (uniform_list OccupiedCell n) = n) by apply uniform_list_len.
+    assert (n - length (uniform_list OccupiedCell n) = 0) as Hlen_sub by omega.
+    rewrite app_firstn_1st, firstn_short by omega.
+    destruct n; simpl in *.
+    + rewrite firstn_short; auto.
+    + destruct (le_dec n (length rmp)).
+      - rewrite app_firstn_2nd, app_skipn_2nd, Hlen_sub by omega; simpl.
+        rewrite firstn_short; auto.
+        rewrite skipn_len, uniform_list_len; auto.
+      - assert (skipn n rmp = nil) as Hskipn_is_nil by
+          (rewrite skipn_long by omega; auto).
+        rewrite skipn_long, Hskipn_is_nil; auto.
+        rewrite app_firstn_1st.
+        * rewrite firstn_length, Min.le_min_l; omega.
+        * rewrite uniform_list_len; omega.
+  Qed.
+
+  Lemma mffaw_at_end:
+    forall (rmp : MemPool) (c : MemCell) (n : nat),
+    ~ n <= mp_count_free_prefix (c :: rmp) ->
+    mp_count_free_prefix (c :: rmp) = S (mp_count_all rmp) ->
+    firstn n (skipn 0 (uniform_list OccupiedCell n)) = uniform_list OccupiedCell n /\
+    firstn 0 (uniform_list OccupiedCell n) = firstn 0 (c :: rmp) /\
+    skipn n (firstn (length (c :: rmp)) (uniform_list OccupiedCell n)) = skipn n (c :: rmp).
+  Proof.
+    unfold mp_count_all, mp_count_free_prefix; intros; simpl.
+    assert (length (uniform_list OccupiedCell n) = n) by apply uniform_list_len.
+    assert (uniform_prefix_len eq_dec (c :: rmp) FreeCell <= length (c :: rmp)) by
+      apply uniform_prefix_len_bound.
+    assert (length (c :: rmp) = S (length rmp)) by auto.
+    destruct (uniform_list OccupiedCell n); simpl length in *; try omega.
+    rewrite firstn_short; repeat rewrite skipn_long; simpl; auto; try omega.
+    rewrite firstn_length, Min.min_l; omega.
+  Qed.
+
+  Lemma mffaw_rec:
+    forall (rmp nrmp : MemPool) (c : MemCell) (bo no n : nat),
+    bo <= no ->
+    (firstn n (skipn (no - bo) nrmp) = uniform_list OccupiedCell n /\
+     firstn (no - bo) nrmp = firstn (no - bo) rmp /\
+     skipn (no + n - bo) (firstn (length rmp) nrmp) = skipn (no + n - bo) rmp) ->
+    firstn n (skipn (S no - bo) (c :: nrmp)) = uniform_list OccupiedCell n /\
+    firstn (S no - bo) (c :: nrmp) = firstn (S no - bo) (c :: rmp) /\
+    skipn (S no + n - bo) (firstn (length (c :: rmp)) (c :: nrmp)) =
+    skipn (S no + n - bo) (c :: rmp).
+  Proof.
+    intros rmp nrmp c bo no n Hbo_le_no Hind; simpl length.
+    assert (S no - bo = S (no - bo)) as Hnobo by omega.
+    assert (S no + n - bo = S (no + n - bo)) as Hnonbo by omega.
+    assert (firstn (S (length rmp)) (c :: nrmp) = c :: firstn (length rmp) nrmp) as Hfirstn
+      by (simpl; auto).
+    rewrite Hnobo, Hnonbo, Hfirstn; simpl.
+    destruct Hind as [Hind1 [Hind2 Hind3]].
+    repeat split; auto; f_equal; auto.
+  Qed.
+
+  Lemma malloc_first_fit_aux_works:
+    forall (mp : MemPool) (n bo : nat),
+    let (o, nmp) := mp_malloc_first_fit_aux mp n bo in
+    firstn n (skipn (o - bo) nmp) = uniform_list OccupiedCell n /\
+    firstn (o - bo) nmp = firstn (o - bo) mp /\
+    skipn (o + n - bo) (firstn (length mp) nmp) = skipn (o + n - bo) mp.
+  Proof.
+    assert (forall bo, bo - bo = 0) as Hbo by (intros; omega).
+    assert (forall bo n, bo + n - bo = n) as Hbon by (intros; omega).
+    assert (forall n, length (uniform_list OccupiedCell n) <= n) as Hlen by
+      (intros; rewrite uniform_list_len; omega).
+    induction mp as [ | c rmp]; simpl mp_malloc_first_fit_aux.
+    + intros; rewrite skipn_long, app_nil_r by (simpl; omega).
+      destruct (le_dec _ _);
+        rewrite Hbo, Hbon, firstn_short by apply Hlen; simpl; auto.
+    + intros; destruct (le_dec _ _).
+      - rewrite Hbo, Hbon; apply mffaw_fits_beginning.
+      - destruct (Nat.eq_dec _ _).
+        * rewrite Hbo, Hbon; apply mffaw_at_end; auto.
+        * remember (mp_malloc_first_fit_aux _ _ _) as rec.
+          specialize (IHrmp n bo).
+          destruct rec as (no, nrmp) in *.
+          rewrite <-Heqrec in IHrmp.
+          apply mffaw_rec; auto.
+          assert (let (no, nrmp) := mp_malloc_first_fit_aux rmp n bo in bo <= no)
+            by apply offset_bigger_than_base.
+          destruct (mp_malloc_first_fit_aux rmp n bo) as (no', nrmp').
+          inversion Heqrec; auto.
+  Qed.
 
   Lemma malloc_first_fit_works:
     forall (mp : MemPool) (n : nat),
@@ -216,27 +336,15 @@ Section MemPoolMallocFirstFit.
     firstn o nmp = firstn o mp /\
     skipn (o + n) (firstn (length mp) nmp) = skipn (o + n) mp.
   Proof.
-    intros mp n; unfold mp_malloc_first_fit; induction mp as [ | c rmp]; simpl.
-    {
-      unfold mp_count_free_prefix; destruct n; simpl; split; auto.
-      assert (length (uniform_list OccupiedCell n) = n) by apply uniform_list_len.
-      rewrite firstn_short by omega; auto.
-    }
-    {
-      destruct (le_dec n (mp_count_free_prefix (c :: rmp))); simpl;
-        assert (length (uniform_list OccupiedCell n) = n) by apply uniform_list_len.
-      + rewrite app_firstn_1st, firstn_short by omega.
-        destruct n; simpl.
-        - rewrite firstn_short by omega; auto.
-        - assert (mp_count_free_prefix (c :: rmp) <= length (c :: rmp)) by
-            apply uniform_prefix_len_bound.
-          assert (length (uniform_list OccupiedCell n ++ skipn n rmp) = length rmp)
-            by (rewrite app_length, uniform_list_len, skipn_len; simpl in *; omega).
-          assert (length (uniform_list OccupiedCell n) = n) by apply uniform_list_len.
-          rewrite firstn_short, app_skipn_2nd by omega.
-          rewrite uniform_list_len, Nat.sub_diag; simpl; auto.
-      + admit.
-    }
-  Admitted.
+    intros; unfold mp_malloc_first_fit.
+    remember (mp_malloc_first_fit_aux _ _ _) as tmp.
+    pose (malloc_first_fit_aux_works mp n 0) as H.
+    destruct tmp as (o, nmp) in *.
+    rewrite <-Heqtmp in H.
+    assert (o = o - 0) as Ho by omega.
+    assert ((o - 0) + n = o + n - 0) as Hon by omega.
+    rewrite Ho, Hon.
+    apply H.
+Qed.
 
 End MemPoolMallocFirstFit.
