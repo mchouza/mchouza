@@ -130,6 +130,16 @@ Section ListExtraProperties.
     + destruct (eq_dec a b); omega.
   Qed.
 
+  Lemma uniform_prefix_drop:
+    forall (l : list A) (a : A) (n : nat),
+    uniform_prefix_len l a = S n ->
+    uniform_prefix_len (skipn 1 l) a = n.
+  Proof.
+    induction l as [ | b l'].
+    + simpl; intros; omega.
+    + intros a n; simpl; destruct (eq_dec a b); omega.
+  Qed.
+
   Lemma count_occ_uniform_list:
     forall (a b : A) (n : nat),
     let ul := uniform_list a n in
@@ -345,6 +355,36 @@ Section MemPoolMallocFirstFit.
     assert ((o - 0) + n = o + n - 0) as Hon by omega.
     rewrite Ho, Hon.
     apply H.
-Qed.
+  Qed.
+
+  Lemma malloc_first_fit_doesnt_skip_aux:
+    forall (mp : MemPool) (n fo bo : nat),
+    n <= mp_count_free_prefix (skipn fo mp) ->
+    fst (mp_malloc_first_fit_aux mp n bo) <= bo + fo.
+  Proof.
+    unfold mp_malloc_first_fit, mp_count_free_prefix; induction mp.
+    + destruct fo; simpl; intros; assert (n = 0) as Hn_eq_0 by omega.
+      rewrite Hn_eq_0; simpl; auto; omega.
+      destruct (le_dec _ _); simpl; omega.
+    + intros n fo; simpl; destruct (le_dec n (mp_count_free_prefix (a :: mp))).
+      - simpl; intros; omega.
+      - destruct (Nat.eq_dec _ _); simpl; intros; try omega.
+        unfold mp_count_free_prefix in *.
+        destruct fo as [ | fo']; simpl skipn in *; try omega.
+        remember (mp_malloc_first_fit_aux _ _ _) as rec.
+        destruct rec as [no nrmp]; simpl.
+        specialize (IHmp n fo' bo H).
+        rewrite <-Heqrec in *; simpl in *; omega.
+  Qed.
+
+  Lemma malloc_first_fit_doesnt_skip:
+    forall (mp : MemPool) (n fo : nat),
+    n <= mp_count_free_prefix (skipn fo mp) ->
+    fst (mp_malloc_first_fit mp n) <= fo.
+  Proof.
+    intros mp n fo H.
+    pose (malloc_first_fit_doesnt_skip_aux (n := n) mp fo 0 H) as Hbase.
+    simpl in *; auto.
+  Qed.
 
 End MemPoolMallocFirstFit.
