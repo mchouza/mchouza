@@ -12,4 +12,4 @@ handler_socket, _ = server_socket.accept()
 client_socket.send('12345')
 
 for i in range(6):
-    print 'Reading 1 byte:', handler_socket.recv(1)
+    print 'Trying to read 2 bytes:', handler_socket.recv(2)
