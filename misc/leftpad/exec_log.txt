@@ -1,0 +1,36 @@
+Marianos-MacBook-Air:leftpad mchouza$ git status . && git log -1 .
+On branch master
+Your branch is up-to-date with 'origin/master'.
+nothing to commit, working tree clean
+commit 824334ec0e8f0d7914fcfc08636d5ed2c04819f7
+Author: Mariano Chouza <mchouza@gmail.com>
+Date:   Fri Apr 27 00:14:01 2018 +0100
+
+    Leftpad (just code).
+Marianos-MacBook-Air:leftpad mchouza$ /Applications/CoqIDE_8.5pl2.app/Contents/Resources/bin/coqtop -batch  -l leftpad.v && echo 'Success.'
+Welcome to Coq ciosx:/builds/workspace/coq-8.5pl2-macos,(detached from e1661dc) (e1661dc9a43b34526437e9bc3029e6320e09f899)
+Success.
+Marianos-MacBook-Air:leftpad mchouza$ git diff .
+diff --git a/misc/leftpad/leftpad.v b/misc/leftpad/leftpad.v
+index 364d9dd..8fa12a3 100644
+--- a/misc/leftpad/leftpad.v
++++ b/misc/leftpad/leftpad.v
+@@ -14,7 +14,7 @@ Definition test_empty: leftpad nil 3 42 = 42 :: 42 :: 42 :: nil := eq_refl.
+ Definition test_longer: leftpad (1 :: 2 :: 3 :: nil) 2 42 = 1 :: 2 :: 3 :: nil := eq_refl.
+ Definition test_equal: leftpad (1 :: 2 :: 3 :: nil) 3 42 = 1 :: 2 :: 3 :: nil := eq_refl.
+ Definition test_padded_0: leftpad (1 :: 2 :: 3 :: nil) 4 42 = 42 :: 1 :: 2 :: 3 :: nil := eq_refl.
+-Definition test_padded_1: leftpad (1 :: 2 :: 3 :: nil) 5 42 = 42 :: 42 :: 1 :: 2 :: 3 :: nil := eq_refl.
++Definition test_padded_1: leftpad (1 :: 2 :: 3 :: nil) 5 42 = 43 :: 42 :: 1 :: 2 :: 3 :: nil := eq_refl.
+ 
+ (* proof *)
+ 
+Marianos-MacBook-Air:leftpad mchouza$ /Applications/CoqIDE_8.5pl2.app/Contents/Resources/bin/coqtop -batch  -l leftpad.v && echo 'Success.'
+Welcome to Coq ciosx:/builds/workspace/coq-8.5pl2-macos,(detached from e1661dc) (e1661dc9a43b34526437e9bc3029e6320e09f899)
+File "/Users/mchouza/Desktop/mchouza/misc/leftpad/leftpad.v", line 17, characters 96-103:
+Error:
+The term "eq_refl" has type
+ "leftpad (1 :: 2 :: 3 :: nil) 5 42 = leftpad (1 :: 2 :: 3 :: nil) 5 42"
+while it is expected to have type
+ "leftpad (1 :: 2 :: 3 :: nil) 5 42 = 43 :: 42 :: 1 :: 2 :: 3 :: nil"
+(cannot unify "leftpad (1 :: 2 :: 3 :: nil) 5 42" and
+"43 :: 42 :: 1 :: 2 :: 3 :: nil").
