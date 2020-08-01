@@ -905,3 +905,375 @@ Proof.
     rewrite Zrange_length by omega.
     ring.
 Qed.
+
+Function Zprime_factor_exp_fact (n p : Z) {measure Zabs_nat n} : Z :=
+  if (0 <? n) && (1 <? p) then
+    n / p + (Zprime_factor_exp_fact (n / p) p)
+  else
+    0.
+Proof.
+  intros n p bool_cond.
+  rewrite andb_true_iff in bool_cond.
+  repeat rewrite Z.ltb_lt in bool_cond.
+  apply Zabs2Nat.inj_lt; try omega.
+  + apply Z.div_pos; omega.
+  + apply Z.div_lt; omega.
+Defined.
+
+Lemma Zprime_factor_exp_fact_base:
+  forall (n p : Z),
+  (n <= 0) \/ (p <= 1) ->
+  Zprime_factor_exp_fact n p = 0.
+Proof.
+  intros n p Hcond; functional induction (Zprime_factor_exp_fact n p).
+  + rewrite andb_true_iff in e; repeat rewrite Z.ltb_lt in e; omega.
+  + auto.
+Qed.
+
+Lemma Zprime_factor_exp_fact_recursion:
+  forall (n p : Z),
+  (0 < n) /\ (1 < p) ->
+  Zprime_factor_exp_fact n p =
+  n / p + Zprime_factor_exp_fact (n / p) p.
+Proof.
+  intros n p Hcond; functional induction (Zprime_factor_exp_fact n p).
+  + auto.
+  + rewrite andb_false_iff in e; repeat rewrite Z.ltb_ge in e; omega.
+Qed.
+
+Lemma Zprime_factor_exp_fact_works:
+  forall (n p : Z),
+  0 <= n ->
+  prime p ->
+  Zfactor_exp (Zfact n) p = Zprime_factor_exp_fact n p.
+Proof.
+  intros n p n_ge_0; revert p. 
+  apply Zlt_0_ind with (x := n); auto; clear n n_ge_0.
+  intros n Hind n_ge_0 p p_is_prime.
+  destruct (Z_eq_dec 0 n) as [n_eq_0 | n_ne_0].
+  + subst; assert (Zfact 0 = 1) as Hrw by now compute. rewrite Hrw; clear Hrw.
+    rewrite Zfactor_exp_1_is_0, Zprime_factor_exp_fact_base; omega.
+  + rewrite Zfactor_exp_fact_rec by (auto; omega).
+    assert (2 <= p) as p_ge_2 by now apply prime_ge_2.
+    rewrite Zprime_factor_exp_fact_recursion by omega.
+    rewrite Hind; auto.
+    - split.
+      * apply Z.div_pos; omega.
+      * apply Z.div_lt; omega.
+Qed.
+
+Lemma Zprime_factor_exp_fact_ge_0:
+  forall (n p : Z),
+  0 <= Zprime_factor_exp_fact n p.
+Proof.
+  intros n p; functional induction (Zprime_factor_exp_fact n p).
+  + rewrite andb_true_iff in e; repeat rewrite Z.ltb_lt in e.
+    assert (0 <= n / p) as div_pos by (apply Z.div_pos; omega).
+    omega.
+  + omega.
+Qed.
+
+Lemma Zprime_factor_exp_fact_incr_in_n:
+  forall (n n' p : Z),
+  0 <= n <= n' ->
+  1 < p ->
+  Zprime_factor_exp_fact n p <= Zprime_factor_exp_fact n' p.
+Proof.
+  intros n n' p n_bound; assert (0 <= n') as n'_ge_0 by omega; revert n p n_bound.
+  apply Zlt_0_ind with (x := n'); auto; clear n' n'_ge_0.
+  intros n' Hind _ n p n_bound p_gt_1.
+  destruct (Z_eq_dec n' 0) as [n'_eq_0 | n'_ne_0],
+           (Z_eq_dec n 0) as [n_eq_0 | n_ne_0]; try omega.
+  + repeat rewrite Zprime_factor_exp_fact_base; omega.
+  + rewrite Zprime_factor_exp_fact_base by omega.
+    apply Zprime_factor_exp_fact_ge_0.
+  + rewrite Zprime_factor_exp_fact_recursion with (n := n) by omega.
+    rewrite Zprime_factor_exp_fact_recursion with (n := n') by omega.
+    assert (n / p <= n' / p) as div_le
+      by (apply Z.div_le_mono; omega).
+    assert (0 <= n / p) as div_nonneg
+      by (apply Z.div_pos; omega).
+    assert (n' / p < n') as div_upper_bound
+      by (apply Z.div_lt; omega).
+    assert (Zprime_factor_exp_fact (n / p) p <=
+            Zprime_factor_exp_fact (n' / p) p) as rec_le
+      by (apply Hind; omega).
+    omega.
+Qed.
+
+Lemma Zprime_factor_exp_fact_decr_in_p:
+  forall (n p p' : Z),
+  0 <= n ->
+  1 < p <= p' ->
+  Zprime_factor_exp_fact n p' <= Zprime_factor_exp_fact n p.
+Proof.
+  intros n p p' n_ge_0; revert p p'.
+  apply Zlt_0_ind with (x := n); auto; clear n n_ge_0.
+  intros n Hind n_ge_0 p p' p_bounds.
+  destruct (Z_eq_dec n 0) as [n_eq_0 | n_ne_0].
+  + repeat rewrite Zprime_factor_exp_fact_base; omega.
+  + rewrite Zprime_factor_exp_fact_recursion with (p := p) by omega.
+    rewrite Zprime_factor_exp_fact_recursion with (p := p') by omega.
+    assert (n / p' <= n / p) as div_le
+      by (apply Z.div_le_compat_l; omega).
+    assert (Zprime_factor_exp_fact (n / p) p' <=
+            Zprime_factor_exp_fact (n / p) p) as rec_le.
+    {
+      apply Hind; try omega; split.
+      + apply Z.div_pos; omega.
+      + apply Z.div_lt; omega.
+    }
+    assert (Zprime_factor_exp_fact (n / p') p' <=
+            Zprime_factor_exp_fact (n / p) p') as decr_n_le.
+    {
+      apply Zprime_factor_exp_fact_incr_in_n; try split; try omega.
+      apply Z.div_pos; omega.
+    }
+    omega.
+Qed.
+
+Lemma mod_ne_0_not_div:
+  forall (n d : Z),
+  d <> 0 ->
+  n mod d <> 0 ->
+  ~(d | n).
+Proof.
+  intros n d d_ne_0 n_mod_d_ne_0.
+  intros Habs; apply Z.mod_divide in Habs; omega.
+Qed.
+
+Lemma prime_5:
+  prime 5.
+Proof.
+  rewrite <-prime_alt; unfold prime'.
+  split; try omega.
+  intros d d_bound.
+  apply mod_ne_0_not_div; try omega.
+  destruct (Z_eq_dec d 2), (Z_eq_dec d 3), (Z_eq_dec d 4); try omega; subst; now compute.
+Qed.
+
+Lemma div_10_to_2_5:
+  forall (n a : Z),
+  (10^a | n) ->
+  (2^a | n) /\ (5^a | n).
+Proof.
+  intros n a [n' div_10]; split.
+  + exists (n' * 5^a); subst; rewrite <-Z.mul_assoc, <-Z.pow_mul_l; now compute.
+  + exists (n' * 2^a); subst; rewrite <-Z.mul_assoc, <-Z.pow_mul_l; now compute.
+Qed.
+
+Lemma prime_pow_not_div:
+  forall (p q a : Z),
+  prime p -> 
+  prime q ->
+  p <> q ->
+  0 < a ->
+  ~(q | p^a).
+Proof.
+  intros p q a p_is_prime q_is_prime p_ne_q a_gt_0.
+  assert (0 <= a) as a_ge_0 by omega; revert a_gt_0.
+  apply Zlt_0_ind with (x := a); auto; clear a a_ge_0.
+  intros a Hind _ a_gt_0 Habs.
+  assert (a = 1 + (a - 1)) as Hrw by omega; rewrite Hrw in Habs; clear Hrw.
+  rewrite Z.pow_add_r, Z.pow_1_r in Habs by omega.
+  destruct (Z_eq_dec a 1) as [a_eq_1 | a_ne_1].
+  {
+    subst; rewrite Z.pow_0_r, Z.mul_1_r in Habs.
+    apply prime_div_prime in Habs; auto; omega.
+  }
+  cut ((q | p) \/ (q | p^(a - 1))).
+  + intros [Habs' | Habs'].
+    - apply prime_div_prime in Habs'; auto; omega.
+    - apply Hind in Habs'; omega.
+  + now apply prime_mult.
+Qed.
+
+Lemma div_prime_pow:
+  forall (n p q a b : Z),
+  prime p ->
+  prime q ->
+  p <> q ->
+  (p^a | n) ->
+  (q^b | n) ->
+  (p^a * q^b | n).
+Proof.
+  intros n p q a b p_is_prime q_is_prime p_ne_q pow_p_div_n pow_q_div_n.
+  destruct (Z_le_dec a 0) as [a_le_0 | a_gt_0].
+  + destruct (Z_eq_dec a 0) as [a_eq_0 | a_ne_0].
+    - destruct pow_q_div_n as [n' pow_q_div_n].
+      exists n'; subst; rewrite Z.pow_0_r.
+      ring.
+    - rewrite Z.pow_neg_r in pow_p_div_n by omega; apply Z.divide_0_l in pow_p_div_n.
+      exists 0; subst; ring.
+  + destruct (Z_le_dec 0 b) as [b_ge_0 | b_lt_0].
+    - revert pow_q_div_n.
+      apply Zlt_0_ind with (x := b); auto; clear b b_ge_0.
+      intros b Hind b_ge_0 pow_q_div_n.
+      destruct (Z_eq_dec b 0) as [b_eq_0 | b_ne_0].
+      * subst; now rewrite Z.pow_0_r, Z.mul_1_r.
+      * destruct pow_q_div_n as [n'' pow_q_div_n].
+        assert (exists (n' : Z), n = n' * (p^a * q^(b-1))) as [n' n'_def].
+        {
+          apply Hind; try omega.
+          exists (n'' * q^1); rewrite <-Z.mul_assoc, <-Z.pow_add_r by omega.
+          assert (1 + (b - 1) = b) as Hrw by omega; now rewrite Hrw.
+        }
+        rewrite pow_q_div_n in n'_def.
+        assert (b = 1 + (b - 1)) as Hrw by omega; 
+          rewrite Hrw in n'_def at 1; rewrite Hrw; clear Hrw.
+        rewrite Z.pow_add_r in n'_def by omega; repeat rewrite Z.mul_assoc in n'_def.
+        assert (q^(b - 1) <> 0) as Haux.
+        {
+          apply Z.pow_nonzero; try omega.
+          cut (2 <= q); try omega.
+          now apply prime_ge_2.
+        }
+        apply Z.mul_reg_r in n'_def; auto; clear Haux.
+        rewrite Z.pow_1_r in n'_def.
+        assert ((q | n')) as [m q_div_n'].
+        {
+          cut ((q | n') \/ (q | p^a)).
+          + intros [H | Habs]; auto.
+            apply prime_pow_not_div in Habs; auto; omega.
+          + apply prime_mult; auto.
+            now exists n''.
+        }
+        exists m; rewrite Z.pow_add_r, Z.pow_1_r by omega.
+        assert (m * (p ^ a * (q * q ^ (b - 1))) =
+                m * q * p^a * q^(b - 1)) as Hrw by ring.
+        rewrite Hrw; clear Hrw.
+        rewrite <-q_div_n', <-n'_def.
+        rewrite <-Z.pow_1_r with (a := q) at 1.
+        rewrite <-Z.mul_assoc, <-Z.pow_add_r by omega.
+        assert (1 + (b - 1) = b) as Hrw by omega; now rewrite Hrw.
+    - rewrite Z.pow_neg_r in pow_q_div_n by omega; apply Z.divide_0_l in pow_q_div_n.
+      exists 0; subst; ring.
+Qed.
+
+Lemma div_2_5_to_10_aux:
+  forall (n a b : Z),
+  0 <= a ->
+  0 <= b ->
+  (2^a | n) ->
+  (5^b | n) ->
+  (10^(Z.min a b) | n).
+Proof.
+  intros n a b a_ge_0 b_ge_0 div_2 div_5; remember (Z.min a b) as c.
+  assert (prime 2) as prime_2 by apply prime_2.
+  assert (prime 5) as prime_5 by apply prime_5.
+  assert ((2^a * 5^b | n)) as [n' div_prod]
+    by (apply div_prime_pow; auto; omega).
+  exists (n' * 2^(a - c) * 5^(b - c)); subst n.
+  assert (10 = 2 * 5) as Hrw by now compute. rewrite Hrw; clear Hrw.
+  assert (a = (a - c) + c) as Hrw by omega; rewrite Hrw at 1; clear Hrw.
+  assert (b = (b - c) + c) as Hrw by omega; rewrite Hrw at 1; clear Hrw.
+  assert (0 <= c) as c_ge_0
+    by (subst; destruct (Zmin_irreducible a b); omega).
+  assert (c <= a) as c_le_a
+    by (subst; apply Z.le_min_l; auto).
+  assert (c <= b) as c_le_b
+    by (subst; apply Z.le_min_r; auto).
+  repeat rewrite Z.pow_add_r; try omega.
+  rewrite Z.pow_mul_l; ring.
+Qed.
+
+Lemma div_2_5_to_10:
+  forall (n a b : Z),
+  (2^a | n) ->
+  (5^b | n) ->
+  (10^(Z.min a b) | n).
+Proof.
+  intros n a b div_2 div_5.
+  destruct (Z_lt_dec a 0) as [a_lt_0 | a_ge_0].
+  + rewrite Z.pow_neg_r in div_2 by omega.
+    apply Z.divide_0_l in div_2; subst.
+    apply Z.divide_0_r.
+  + destruct (Z_lt_dec b 0) as [b_lt_0 | b_ge_0].
+    - rewrite Z.pow_neg_r in div_5 by omega.
+      apply Z.divide_0_l in div_5; subst.
+      apply Z.divide_0_r.
+    - apply div_2_5_to_10_aux; auto; omega.
+Qed.
+
+Lemma Zfact_gt_0:
+  forall (n : Z),
+  0 <= n ->
+  0 < Zfact n.
+Proof.
+  intros n n_ge_0; functional induction (Zfact n).
+  + apply Z.ltb_lt in e; apply Z.mul_pos_pos; auto.
+    apply IHz; omega.
+  + omega.
+Qed.
+
+Lemma div_pow_le:
+  forall (n a b b' : Z),
+  0 <= b' <= b ->
+  (a^b | n) ->
+  (a^b' | n).
+Proof.
+  intros n a b b' b_bound [n' div_pow].
+  exists (n' * a^(b - b')); subst.
+  rewrite <-Z.mul_assoc, <-Z.pow_add_r by omega.
+  assert (b - b' + b' = b) as Hrw by omega; now rewrite Hrw.
+Qed.
+
+Theorem main:
+  forall (n d : Z),
+  0 <= n ->
+  d = Zprime_factor_exp_fact n 5 <->
+  (10^d | Zfact n) /\ ~(10^(d+1) | Zfact n).
+Proof.
+  intros n d n_ge_0.
+  pose prime_5; pose prime_2.
+  assert (0 < Zfact n) as fact_gt_0 by now apply Zfact_gt_0.
+  split.
+  + intros d_def.
+    assert (d <= Zprime_factor_exp_fact n 2) as d_bound
+      by (subst; apply Zprime_factor_exp_fact_decr_in_p; omega).
+    rewrite <-Zprime_factor_exp_fact_works in * by auto.
+    remember (Zfactor_exp (Zfact n) 2) as d'.
+    rewrite Zfactor_exp_works in * by omega.
+    split.
+    - assert (d = Z.min d' d) as Hrw
+        by now apply eq_sym, Z.min_r.
+      rewrite Hrw; clear Hrw.
+      now apply div_2_5_to_10.
+    - intros Habs; now apply div_10_to_2_5 in Habs.
+  + intros [div_pow not_div_pow].
+    apply div_10_to_2_5 in div_pow.
+    rewrite <-Zprime_factor_exp_fact_works by auto.
+    rewrite Zfactor_exp_works by omega.
+    split; try tauto.
+    intros Habs.
+    remember (Zprime_factor_exp_fact n 5) as d'.
+    remember (Zprime_factor_exp_fact n 2) as d''.
+    assert (d' <= d'') as d'_d''_bound
+      by (subst; apply Zprime_factor_exp_fact_decr_in_p; omega).
+    rewrite <-Zprime_factor_exp_fact_works in * by auto.
+    rewrite Zfactor_exp_works in * by omega.
+    destruct (Z_lt_dec d 0) as [d_lt_0 | d_ge_0].
+    {
+      rewrite Z.pow_neg_r in div_pow by auto.
+      destruct div_pow as [div_pow _]; apply Z.divide_0_l in div_pow; omega.
+    }
+    destruct (Z.lt_trichotomy d d') as [d_lt_d' | [d_eq_d' | d_gt_d']].
+    - assert (2^(d+1) | Zfact n) as Habs'
+        by (apply div_pow_le with (b := d''); try tauto; omega).
+      assert (10^(d+1) | Zfact n) as Habs''.
+      {
+        assert (d + 1 = Z.min (d + 1) (d + 1)) as Hrw by now rewrite Z.min_l.
+        rewrite Hrw; clear Hrw.
+        now apply div_2_5_to_10.
+      }
+      tauto.
+    - now subst.
+    - destruct (Z_lt_dec d' 0) as [d'_lt_0 | d'_ge_0].
+      {
+        destruct Heqd' as [Heqd' _].
+        rewrite Z.pow_neg_r in Heqd' by auto.
+        apply Z.divide_0_l in Heqd'; omega.
+      }
+      now assert (5^(d'+1) | Zfact n) as Habs''
+        by (apply div_pow_le with (b := d + 1); auto; omega).
+Qed.
